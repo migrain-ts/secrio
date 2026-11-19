@@ -1,5 +1,5 @@
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
-import { Icon } from "@iconify/react"
+import { NavArrowDownIcon } from "@/components/icons"
 import { motion } from "motion/react"
 
 import { cn } from "@/lib/utils"
@@ -36,8 +36,7 @@ function AccordionTrigger({
         {...props}
       >
         {children}
-        <Icon
-          icon="tabler:chevron-down"
+        <NavArrowDownIcon
           className="h-4 w-4 shrink-0 transition-transform duration-base ease-out"
         />
       </AccordionPrimitive.Trigger>

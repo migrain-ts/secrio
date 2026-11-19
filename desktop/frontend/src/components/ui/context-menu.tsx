@@ -1,6 +1,6 @@
 import * as React from "react"
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu"
-import { Icon } from "@iconify/react"
+import { CheckIcon, NavArrowRightIcon } from "@/components/icons"
 
 import { cn } from "@/lib/utils"
 
@@ -34,7 +34,7 @@ function ContextMenuSubTrigger({
       {...props}
     >
       {children}
-      <Icon icon="tabler:chevron-right" className="ml-auto h-4 w-4" />
+      <NavArrowRightIcon className="ml-auto h-4 w-4" />
     </ContextMenuPrimitive.SubmenuTrigger>
   )
 }
@@ -131,7 +131,7 @@ function ContextMenuCheckboxItem({
     >
       <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
         <ContextMenuPrimitive.CheckboxItemIndicator>
-          <Icon icon="tabler:check" className="h-4 w-4" />
+          <CheckIcon className="h-4 w-4" />
         </ContextMenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}

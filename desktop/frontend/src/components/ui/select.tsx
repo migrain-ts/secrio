@@ -1,7 +1,7 @@
 "use client"
 
 import { Select as SelectPrimitive } from "@base-ui/react/select"
-import { Icon } from "@iconify/react"
+import { CheckIcon, NavArrowDownIcon } from "@/components/icons"
 import { motion } from "motion/react"
 
 import { cn } from "@/lib/utils"
@@ -38,7 +38,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon
-        render={<Icon icon="tabler:chevron-down" className="h-4 w-4 opacity-50" />}
+        render={<NavArrowDownIcon className="h-4 w-4 opacity-50" />}
       />
     </SelectPrimitive.Trigger>
   )
@@ -131,7 +131,7 @@ function SelectItem({
     >
       <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
-          <Icon icon="tabler:check" className="h-4 w-4" />
+          <CheckIcon className="h-4 w-4" />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

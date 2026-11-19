@@ -1,0 +1,11 @@
+{
+  "library": "iconoir",
+  "prefix": "iconoir",
+  "source": "iconify",
+  "installedAt": "2026-11-19T21:56:36.019Z",
+  "icons": [
+    "check",
+    "nav-arrow-down",
+    "nav-arrow-right"
+  ]
+}
