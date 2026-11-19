@@ -15,6 +15,16 @@ type ProjectDTO struct {
 	SecretCount int    `json:"secretCount"`
 }
 
+// SecretDTO is a secret's metadata. It has no value field, ever; the value
+// only leaves through RevealSecret. Times are RFC3339 UTC.
+type SecretDTO struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt"`
+}
+
 // EnvDTO is an environment with its secret count.
 type EnvDTO struct {
 	ID          string `json:"id"`
