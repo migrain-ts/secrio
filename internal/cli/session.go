@@ -13,7 +13,7 @@ import (
 // (locked, keychain unavailable, damaged session) and SECRIO_PASSWORD is set,
 // it opens with the password instead (no session is created). Without the
 // variable, a locked vault fails with the "locked" exit code and any other
-// error is returned as is.
+// error (for example a keychain failure) gets a hint to set SECRIO_PASSWORD.
 func openVault(ctx context.Context, d Deps, svc *app.Service, entry app.VaultEntry) (*app.Unlocked, error) {
 	u, err := svc.Open(ctx, entry.ID)
 	if err == nil {
@@ -24,11 +24,15 @@ func openVault(ctx context.Context, d Deps, svc *app.Service, entry app.VaultEnt
 		if errors.Is(err, domain.ErrLocked) {
 			return nil, LockedErr(fmt.Errorf("vault %q is locked: run `secrio unlock`", entry.Name))
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w (set SECRIO_PASSWORD to open without the OS keychain)", err)
 	}
 	pw := []byte(env)
 	defer clear(pw)
-	return svc.OpenWithPassword(ctx, entry.ID, pw)
+	u, err = svc.OpenWithPassword(ctx, entry.ID, pw)
+	if err != nil {
+		return nil, envPasswordErr(d, err)
+	}
+	return u, nil
 }
 
 // selectVault resolves the target vault: the argument if non-empty, else the

@@ -35,7 +35,7 @@ func newUnlockCmd(d Deps, flags *Flags) *cobra.Command {
 			}
 			defer clear(pw)
 			if err := svc.Unlock(ctx, entry.ID, pw, ttl, idle); err != nil {
-				return err
+				return envPasswordErr(d, err)
 			}
 			fmt.Fprintf(d.Out, "unlocked %s (expires in %s)\n", entry.Name, ttl.String())
 			return nil

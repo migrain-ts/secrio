@@ -72,7 +72,7 @@ func TestVaultCreateAndList(t *testing.T) {
 	if code := e.run([]string{"pw1", "pw1"}, "vault", "create", "work"); code != ExitOK {
 		t.Fatalf("code=%d err=%q", code, e.err)
 	}
-	if e.out.String() != "created vault work\n" {
+	if e.out.String() != "created vault work\nnext: secrio unlock work\n" {
 		t.Fatalf("out=%q", e.out)
 	}
 	if strings.Join(e.prompts, "|") != "Password: |Confirm password: " {

@@ -58,7 +58,7 @@ func newVaultCreateCmd(d Deps) *cobra.Command {
 			if _, err := svc.CreateVault(ctx, name, path, pw); err != nil {
 				return err
 			}
-			fmt.Fprintf(d.Out, "created vault %s\n", name)
+			fmt.Fprintf(d.Out, "created vault %s\nnext: secrio unlock %s\n", name, name)
 			return nil
 		},
 	}

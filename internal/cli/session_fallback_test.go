@@ -90,6 +90,9 @@ func TestKeychainDownWithoutPassword(t *testing.T) {
 	if code != ExitFailure || !strings.Contains(e.err.String(), keychainDown) || e.out.Len() != 0 {
 		t.Fatalf("code=%d out=%q err=%q", code, e.out, e.err)
 	}
+	if !strings.HasSuffix(e.err.String(), "(set SECRIO_PASSWORD to open without the OS keychain)\n") {
+		t.Fatalf("no hint: %q", e.err)
+	}
 }
 
 func TestKeychainDownWrongPassword(t *testing.T) {

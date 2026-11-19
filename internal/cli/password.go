@@ -3,7 +3,19 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"fmt"
+
+	"secrio/internal/domain"
 )
+
+// envPasswordErr tells the user a rejected password came from SECRIO_PASSWORD
+// (not from a prompt). It never includes the password.
+func envPasswordErr(d Deps, err error) error {
+	if errors.Is(err, domain.ErrInvalidPassword) && d.Getenv("SECRIO_PASSWORD") != "" {
+		return fmt.Errorf("%w (from SECRIO_PASSWORD)", err)
+	}
+	return err
+}
 
 // readPassword returns the vault password. SECRIO_PASSWORD wins when set (no
 // prompt); otherwise a terminal is required. With confirm the password is

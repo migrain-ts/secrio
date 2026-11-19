@@ -169,6 +169,25 @@ func TestOpenVaultWithEnvPasswordNoSession(t *testing.T) {
 	}
 }
 
+func TestInvalidPasswordFromEnvSaysSo(t *testing.T) {
+	e := newEnv(t)
+	mkVault(t, e, "work")
+	const want = "secrio: invalid password (from SECRIO_PASSWORD)\n"
+	e.vars["SECRIO_PASSWORD"] = "wrong-env-pw"
+	if code := e.run(nil, "unlock", "work"); code != ExitLocked || e.err.String() != want {
+		t.Fatalf("unlock: code=%d err=%q", code, e.err)
+	}
+	e.err.Reset()
+	if code := e.run(nil, "list", "--vault", "work"); code != ExitLocked || e.err.String() != want {
+		t.Fatalf("list: code=%d err=%q", code, e.err)
+	}
+	delete(e.vars, "SECRIO_PASSWORD")
+	e.err.Reset()
+	if code := e.run([]string{"wrong"}, "unlock", "work"); code != ExitLocked || e.err.String() != "secrio: invalid password\n" {
+		t.Fatalf("prompted: code=%d err=%q", code, e.err)
+	}
+}
+
 func TestLockFailureMessage(t *testing.T) {
 	e := newEnv(t)
 	mkVault(t, e, "work")

@@ -150,7 +150,7 @@ func skipNoSh(t *testing.T) {
 func TestCLIFullFlow(t *testing.T) {
 	skipNoSh(t)
 	s := newSandbox(t)
-	if r := s.must("", "vault", "create", "work"); r.out != "created vault work\n" {
+	if r := s.must("", "vault", "create", "work"); r.out != "created vault work\nnext: secrio unlock work\n" {
 		t.Fatalf("vault create: %q", r.out)
 	}
 	s.must("", "project", "create", "hotenb", "--vault", "work")
@@ -197,7 +197,6 @@ func TestCLIExitCodes(t *testing.T) {
 		{"unknown command", nil, []string{"nosuchcmd"}, 2},
 		{"set without name", nil, []string{"set"}, 2},
 		{"missing password without tty", noPw, []string{"vault", "create", "x"}, 3},
-		{"locked get without password", noPw, args([]string{"get", "DATABASE_URL"}, flagsWHP), 3},
 		{"child exit code", nil, args([]string{"run"}, flagsWHP, []string{"--", "sh", "-c", "exit 7"}), 7},
 		{"command not found", nil, args([]string{"run"}, flagsWHP, []string{"--", "nosuchcommand_xyz"}), 127},
 		{"unknown env", nil, []string{"run", "--vault", "work", "--project", "hotenb", "--env", "nope", "--", "true"}, 125},
@@ -218,6 +217,38 @@ func TestCLIExitCodes(t *testing.T) {
 				t.Fatalf("took %s, expected a fast failure", time.Since(start))
 			}
 		})
+	}
+}
+
+// Without SECRIO_PASSWORD the binary uses the real OS keychain, so the result
+// depends on the machine: exit 3 when the keychain works (vault locked) or
+// exit 1 with a hint when it is unavailable. Never success, never a value.
+func TestCLILockedGetWithoutPassword(t *testing.T) {
+	s := newSandbox(t)
+	s.provision()
+	r := s.exec("", []string{"SECRIO_PASSWORD="}, args([]string{"get", "DATABASE_URL"}, flagsWHP)...)
+	switch r.code {
+	case 3:
+	case 1:
+		if !strings.Contains(r.err, "(set SECRIO_PASSWORD to open without the OS keychain)") {
+			t.Fatalf("exit 1 without the keychain hint: %q", r.err)
+		}
+	default:
+		t.Fatalf("exit %d, want 3 or 1 (stdout %q stderr %q)", r.code, r.out, r.err)
+	}
+	if r.out != "" || strings.Contains(r.out+r.err, dbURL) || strings.Contains(r.out+r.err, binPw) {
+		t.Fatalf("leak: %q %q", r.out, r.err)
+	}
+}
+
+func TestCLIVaultCreateHintsUnlock(t *testing.T) {
+	s := newSandbox(t)
+	r := s.must("", "vault", "create", "my-vault")
+	if !strings.HasSuffix(r.out, "\nnext: secrio unlock my-vault\n") {
+		t.Fatalf("no unlock hint: %q", r.out)
+	}
+	if r.err != "" {
+		t.Fatalf("stderr: %q", r.err)
 	}
 }
 
