@@ -20,7 +20,15 @@ func newVaultCreateCmd(d Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create a new vault",
-		Args:  cobra.ExactArgs(1),
+		Long: `Create a vault. The name has up to 64 letters, digits, '.', '_' or '-', and must not
+start with '.' or '-', contain '..', or be a reserved Windows name such as con or
+com1. A name that differs from an existing vault only by case is refused.
+
+The password is asked twice on a terminal, or taken from SECRIO_PASSWORD.
+Creating a vault does not unlock it.`,
+		Example: `  secrio vault create work
+  SECRIO_PASSWORD=... secrio vault create ci`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if err := validVaultName(name); err != nil {

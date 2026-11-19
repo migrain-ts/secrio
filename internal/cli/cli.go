@@ -14,8 +14,29 @@ func NewRoot(d Deps) *cobra.Command {
 	var flags Flags
 
 	root := &cobra.Command{
-		Use:           "secrio",
-		Short:         "Local-first secrets manager",
+		Use:   "secrio",
+		Short: "Local-first secrets manager",
+		Long: `Secrio is a local-first secrets manager: vault > project > environment > secret,
+one encrypted file per vault on this machine.
+
+Context: --vault, --project and --env select where a command works. Each one is
+resolved separately, in this priority: flags, then the SECRIO_VAULT,
+SECRIO_PROJECT and SECRIO_ENV variables, then the nearest .secrio.toml (keys
+vault, project, env), searched upward from the current directory.
+
+Environment variables:
+  SECRIO_HOME       data directory (default: the platform's user data directory)
+  SECRIO_PASSWORD   vault password for scripts; used whenever no session exists
+  SECRIO_VAULT, SECRIO_PROJECT, SECRIO_ENV   context, see above
+
+Exit codes: 0 success, 1 error, 2 usage error, 3 vault locked or wrong password.
+"run" is different: it exits with the command's own code, or 125 if secrio
+failed before starting it, 126 if it could not be executed, 127 if it was not
+found, 128+N if it was killed by signal N.`,
+		Example: `  secrio vault create work
+  secrio unlock work
+  secrio set API_KEY --vault work --project web --env production
+  secrio run --vault work --project web --env production -- ./deploy.sh`,
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,

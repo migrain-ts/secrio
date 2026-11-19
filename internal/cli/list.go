@@ -39,7 +39,17 @@ func newListCmd(d Deps, flags *Flags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List projects, environments or secret names depending on the context",
-		Args:  cobra.NoArgs,
+		Long: `List names, sorted, one per line, never values. What is listed depends on how
+much context is set (the vault is always required; "secrio vault list" lists vaults):
+
+  vault                   lists projects
+  vault + project         lists environments
+  vault + project + env   lists secret names
+
+--env without a project is a usage error.`,
+		Example: `  secrio list --vault work
+  secrio list --vault work --project web --env production`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := LoadContext(d, *flags)
 			if err != nil {

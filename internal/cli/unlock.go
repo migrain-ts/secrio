@@ -12,7 +12,15 @@ func newUnlockCmd(d Deps, flags *Flags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unlock [vault]",
 		Short: "Unlock a vault for a limited time",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Unlock a vault so later commands need no password. The vault is the argument,
+or else --vault / SECRIO_VAULT / .secrio.toml.
+
+The session lasts at most --ttl (default 12h) and ends after --idle without use
+(default 1h); --idle 0 disables idle expiry. Unlocking an unlocked vault replaces
+its session. "secrio lock" ends it.`,
+		Example: `  secrio unlock work
+  secrio unlock work --ttl 2h --idle 0`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ttl <= 0 {
 				return UsageErr("--ttl must be positive")

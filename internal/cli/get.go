@@ -13,7 +13,12 @@ func newGetCmd(d Deps, flags *Flags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "get <NAME>",
 		Short: "Print a secret's value",
-		Args:  cobra.ExactArgs(1),
+		Long: `Print a secret's value to stdout, exactly as stored (raw bytes). A newline is
+added only when stdout is a terminal, so command substitution and pipes get the
+value unchanged.`,
+		Example: `  secrio get DATABASE_URL
+  DB=$(secrio get DATABASE_URL --vault work --project web --env production)`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, err := domain.ParseSecretName(args[0])
 			if err != nil {
