@@ -3,3 +3,8 @@
 *.db
 *.db-wal
 *.db-shm
+desktop/frontend/node_modules/
+desktop/frontend/dist/
+desktop/build/bin/
+cmd/secrio-desktop/build/
+desktop/frontend/package.json.md5

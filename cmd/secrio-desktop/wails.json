@@ -1,0 +1,17 @@
+{
+  "name": "secrio-desktop",
+  "outputfilename": "secrio-desktop",
+  "frontend:dir": "../../desktop/frontend",
+  "frontend:install": "pnpm install --frozen-lockfile",
+  "frontend:build": "pnpm run build",
+  "frontend:dev:watcher": "pnpm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "build:dir": "../../desktop/build",
+  "build:tags": "desktopapp",
+  "info": {
+    "productName": "Secrio",
+    "productVersion": "0.1.0",
+    "copyright": "",
+    "comments": "Local secrets manager"
+  }
+}

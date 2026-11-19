@@ -10,6 +10,15 @@ go build -o secrio ./cmd/secrio
 
 Go 1.26, no CGO.
 
+### Desktop app (macOS, in progress)
+
+```sh
+scripts/desktop-build.sh      # -> desktop/build/bin/secrio-desktop.app
+scripts/desktop-bindings.sh   # regenerate desktop/frontend/wailsjs after changing desktop.API or a DTO
+```
+
+Needs the Wails v2 CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1`), CGO with the Xcode command line tools, Node and pnpm. The Wails shell lives in `cmd/secrio-desktop` behind the `desktopapp` build tag, so plain `go build ./...` stays CGO-free. Only the methods of `internal/desktop.API` are callable from the webview. The generated TypeScript bindings in `desktop/frontend/wailsjs` are committed. Frontend checks: `cd desktop/frontend && pnpm test`.
+
 ## Quick start
 
 ```sh
