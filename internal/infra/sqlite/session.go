@@ -42,6 +42,10 @@ func (s *Store) GetSession(ctx context.Context) (app.SessionRow, error) {
 	return r, nil
 }
 
+// TouchSession's atomicity relies on this being ONE UPDATE statement; it
+// cannot be reliably mutation-tested at unit level. Splitting it into a SELECT
+// then an UPDATE would reintroduce the Lock-vs-Open race.
+//
 // TouchSession is a single atomic statement, so a concurrent DeleteSession
 // from another Store or process can never be followed by a successful touch.
 func (s *Store) TouchSession(ctx context.Context, now time.Time) (bool, error) {

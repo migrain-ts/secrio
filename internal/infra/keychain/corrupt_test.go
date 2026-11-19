@@ -13,6 +13,9 @@ import (
 	"secrio/internal/domain"
 )
 
+// The mock keyring does not decode the go-keyring prefix, so this only covers
+// the fall-through to decode; TestGetErrorMapping is the real coverage of
+// mapGetErr.
 func TestLoadMalformedPrefixedPayloadIsCorrupt(t *testing.T) {
 	keyring.MockInit()
 	if err := keyring.Set("svc", "v", "go-keyring-base64:!!!"); err != nil {

@@ -85,15 +85,15 @@ func decode(payload string) (domain.Key, error) {
 // as a non-persistent fallback when no OS keychain is available.
 type MemoryKeyStore struct {
 	mu sync.Mutex
-	m  map[string]domain.Key
+	m  map[string]*domain.Key // pointers, so Delete can zero the stored key
 }
 
-func NewMemory() *MemoryKeyStore { return &MemoryKeyStore{m: map[string]domain.Key{}} }
+func NewMemory() *MemoryKeyStore { return &MemoryKeyStore{m: map[string]*domain.Key{}} }
 
 func (s *MemoryKeyStore) Save(_ context.Context, vaultID string, k domain.Key) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.m[vaultID] = k
+	s.m[vaultID] = &k
 	return nil
 }
 
@@ -104,12 +104,16 @@ func (s *MemoryKeyStore) Load(_ context.Context, vaultID string) (domain.Key, er
 	if !ok {
 		return domain.Key{}, domain.ErrLocked
 	}
-	return k, nil
+	return *k, nil
 }
 
+// Delete zeroes the stored key before dropping it.
 func (s *MemoryKeyStore) Delete(_ context.Context, vaultID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if k, ok := s.m[vaultID]; ok {
+		*k = domain.Key{}
+	}
 	delete(s.m, vaultID)
 	return nil
 }

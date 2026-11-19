@@ -3,11 +3,13 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"secrio/internal/app"
+	"secrio/internal/domain"
 )
 
 // A vault file written before the sessions table existed gains it when
@@ -39,8 +41,8 @@ func TestOldVaultFileGainsSessionsTable(t *testing.T) {
 	}
 	defer st.Close()
 	now := time.UnixMilli(1700000000000)
-	if _, err := st.GetSession(ctx); err == nil {
-		t.Fatal("old vault reports a session")
+	if _, err := st.GetSession(ctx); !errors.Is(err, domain.ErrLocked) {
+		t.Fatalf("old vault: GetSession = %v, want ErrLocked", err)
 	}
 	if err := st.PutSession(ctx, app.SessionRow{Blob: []byte("b"), ExpiresAt: now.Add(time.Hour), LastUsed: now}); err != nil {
 		t.Fatalf("PutSession on migrated file: %v", err)
