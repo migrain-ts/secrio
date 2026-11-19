@@ -133,7 +133,7 @@ func (s *Service) openStore(ctx context.Context, vaultID string) (RecordStore, V
 // the vault key.
 func (s *Service) Unlock(ctx context.Context, vaultID string, password []byte, ttl, idle time.Duration) (err error) {
 	if ttl <= 0 {
-		return fmt.Errorf("session ttl must be positive")
+		return errors.New("session ttl must be positive")
 	}
 	idle = max(idle, 0)
 	st, meta, err := s.openStore(ctx, vaultID)
