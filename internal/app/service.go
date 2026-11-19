@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"secrio/internal/domain"
@@ -24,6 +25,11 @@ type Service struct {
 	reg      Registry
 	sessions SessionStore
 	clock    Clock
+
+	// sessionMu serialises session writes (Open's Load..Save, Lock, Unlock)
+	// so a Lock cannot be undone by a concurrent Open in this process. It is
+	// never held while calling back into the caller.
+	sessionMu sync.Mutex
 }
 
 func NewService(c Cipher, kdf KDF, p domain.KDFParams, opener VaultOpener, reg Registry, sessions SessionStore, clock Clock) *Service {
@@ -120,12 +126,16 @@ func (s *Service) Unlock(ctx context.Context, vaultID string, password []byte, t
 		return err
 	}
 	defer zeroKey(&vk)
+	s.sessionMu.Lock()
+	defer s.sessionMu.Unlock()
 	now := s.clock.Now()
 	return s.sessions.Save(ctx, vaultID, Session{VaultKey: vk, ExpiresAt: now.Add(ttl), LastUsed: now, Idle: idle})
 }
 
 // Lock forgets the persisted session of vaultID.
 func (s *Service) Lock(ctx context.Context, vaultID string) error {
+	s.sessionMu.Lock()
+	defer s.sessionMu.Unlock()
 	return s.sessions.Delete(ctx, vaultID)
 }
 

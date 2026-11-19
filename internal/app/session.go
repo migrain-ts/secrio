@@ -32,7 +32,13 @@ func (u *Unlocked) Close() error {
 // Open returns a handle from the persisted session. A missing, expired
 // (TTL) or idle session yields domain.ErrLocked; an expired one is deleted.
 // Success refreshes the session's LastUsed.
+//
+// Load..Save is serialised with Lock and Unlock in this process only. A Lock
+// issued by another process during that brief window can be undone, leaving
+// the session valid until its TTL or idle expiry.
 func (s *Service) Open(ctx context.Context, vaultID string) (*Unlocked, error) {
+	s.sessionMu.Lock()
+	defer s.sessionMu.Unlock()
 	sess, err := s.sessions.Load(ctx, vaultID)
 	if err != nil {
 		return nil, err

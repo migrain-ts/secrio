@@ -141,6 +141,70 @@ func TestLockDeletesSession(t *testing.T) {
 	}
 }
 
+// gatedSessions pauses the first armed Load until release is closed, and
+// reports Delete calls on deleted.
+type gatedSessions struct {
+	*fakeSessions
+	armed   bool
+	loaded  chan struct{}
+	release chan struct{}
+	deleted chan struct{}
+}
+
+func (g *gatedSessions) Load(ctx context.Context, id string) (Session, error) {
+	s, err := g.fakeSessions.Load(ctx, id)
+	if g.armed {
+		g.armed = false
+		close(g.loaded)
+		<-g.release
+	}
+	return s, err
+}
+
+func (g *gatedSessions) Delete(ctx context.Context, id string) error {
+	err := g.fakeSessions.Delete(ctx, id)
+	close(g.deleted)
+	return err
+}
+
+func TestLockNotUndoneByConcurrentOpen(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	g := &gatedSessions{fakeSessions: h.sessions, loaded: make(chan struct{}),
+		release: make(chan struct{}), deleted: make(chan struct{})}
+	h.svc = NewService(newTestCipher(), newTestKDF(), testParams, h.opener, h.reg, g, h.clock)
+	id := h.newVault(t)
+	if err := h.svc.Unlock(ctx, id, []byte(testPw), time.Hour, 0); err != nil {
+		t.Fatal(err)
+	}
+	g.armed = true
+
+	opened := make(chan *Unlocked)
+	go func() { // Open pauses between Load and Save
+		u, _ := h.svc.Open(ctx, id)
+		opened <- u
+	}()
+	<-g.loaded
+	locked := make(chan error)
+	go func() { locked <- h.svc.Lock(ctx, id) }()
+	// Without serialisation Delete runs now, inside Open's Load..Save window.
+	// With it, Lock waits for Open; the timeout only decides when to resume.
+	select {
+	case <-g.deleted:
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(g.release)
+	if u := <-opened; u != nil {
+		u.Close()
+	}
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.Open(ctx, id); !errors.Is(err, domain.ErrLocked) {
+		t.Fatalf("Lock undone by concurrent Open: %v", err)
+	}
+}
+
 func TestUnlockWrongPassword(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
