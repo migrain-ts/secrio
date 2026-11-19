@@ -27,8 +27,11 @@ func (u *Unlocked) CreateEnvironment(ctx context.Context, projectID domain.ID[do
 			}
 		}
 		key, err := u.putEnvTx(ctx, tx, env)
-		zeroKey(&key)
-		return err
+		if err != nil {
+			return err
+		}
+		defer zeroKey(&key)
+		return u.recordHistoryTx(ctx, tx, key, historyRec{HistoryEntry: HistoryEntry{EnvID: env.ID, Op: OpEnvCreate}})
 	})
 	if err != nil {
 		return domain.Environment{}, err
@@ -84,7 +87,7 @@ func (u *Unlocked) putEnvTx(ctx context.Context, tx RecordStore, env domain.Envi
 	return key, nil
 }
 
-// deleteEnvTx deletes an environment's secrets, env key and record.
+// deleteEnvTx deletes an environment's secrets, history, env key and record.
 func (u *Unlocked) deleteEnvTx(ctx context.Context, tx RecordStore, envID domain.ID[domain.Environment]) error {
 	secrets, err := tx.List(ctx, KindSecret, string(envID))
 	if err != nil {
@@ -92,6 +95,15 @@ func (u *Unlocked) deleteEnvTx(ctx context.Context, tx RecordStore, envID domain
 	}
 	for _, s := range secrets {
 		if err := tx.Delete(ctx, KindSecret, s.ID); err != nil {
+			return err
+		}
+	}
+	hist, err := tx.List(ctx, KindHistory, string(envID))
+	if err != nil {
+		return err
+	}
+	for _, h := range hist {
+		if err := tx.Delete(ctx, KindHistory, h.ID); err != nil {
 			return err
 		}
 	}
@@ -119,10 +131,17 @@ func (u *Unlocked) copyEnvTx(ctx context.Context, tx RecordStore, src domain.Env
 		return err
 	}
 	defer zeroKey(&dstKey)
+	if err := u.recordHistoryTx(ctx, tx, dstKey, historyRec{HistoryEntry: HistoryEntry{EnvID: dst.ID, Op: OpEnvCreate}}); err != nil {
+		return err
+	}
 	now := u.clock.Now().UTC()
 	for _, s := range secrets {
 		s.ID, s.EnvID, s.CreatedAt, s.UpdatedAt = domain.NewID[domain.Secret](), dst.ID, now, now
 		if err := u.putSecretTx(ctx, tx, dstKey, s); err != nil {
+			return err
+		}
+		if err := u.recordHistoryTx(ctx, tx, dstKey, historyRec{HistoryEntry: HistoryEntry{
+			EnvID: dst.ID, Op: OpSecretCreate, SecretName: s.Name, NewValue: s.Value}}); err != nil {
 			return err
 		}
 	}

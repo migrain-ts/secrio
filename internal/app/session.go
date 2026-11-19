@@ -13,6 +13,7 @@ import (
 // Close.
 type Unlocked struct {
 	c     Cipher
+	kdf   KDF
 	clock Clock
 	store RecordStore
 	key   domain.Key // vault key
@@ -56,7 +57,7 @@ func (s *Service) Open(ctx context.Context, vaultID string) (*Unlocked, error) {
 	if err := s.sessions.Save(ctx, vaultID, sess); err != nil {
 		return nil, errors.Join(err, st.Close())
 	}
-	return &Unlocked{c: s.c, clock: s.clock, store: st, key: sess.VaultKey}, nil
+	return &Unlocked{c: s.c, kdf: s.kdf, clock: s.clock, store: st, key: sess.VaultKey}, nil
 }
 
 // OpenWithPassword returns a handle without persisting any session.
@@ -69,7 +70,7 @@ func (s *Service) OpenWithPassword(ctx context.Context, vaultID string, password
 	if err != nil {
 		return nil, errors.Join(err, st.Close())
 	}
-	return &Unlocked{c: s.c, clock: s.clock, store: st, key: vk}, nil
+	return &Unlocked{c: s.c, kdf: s.kdf, clock: s.clock, store: st, key: vk}, nil
 }
 
 // --- sealed record helpers shared by structure.go and secrets.go ---

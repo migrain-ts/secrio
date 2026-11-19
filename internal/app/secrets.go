@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -32,23 +31,15 @@ func (u *Unlocked) SetSecret(ctx context.Context, envID domain.ID[domain.Environ
 	if !knownSecretTypes[typ] {
 		return domain.Secret{}, fmt.Errorf("%w: unknown secret type", domain.ErrInvalidName)
 	}
-	now := u.clock.Now().UTC()
-	s := domain.Secret{ID: domain.NewID[domain.Secret](), EnvID: envID, Name: name, Value: bytes.Clone(value),
-		Description: desc, Type: typ, CreatedAt: now, UpdatedAt: now}
+	var s domain.Secret
 	err := u.store.Tx(ctx, func(tx RecordStore) error {
 		key, err := u.envKey(ctx, tx, envID)
 		if err != nil {
 			return err
 		}
 		defer zeroKey(&key)
-		existing, err := u.loadSecrets(ctx, tx, key, envID)
-		if err != nil {
-			return err
-		}
-		if old, ok := findSecret(existing, name); ok {
-			s.ID, s.CreatedAt = old.ID, old.CreatedAt
-		}
-		return u.putSecretTx(ctx, tx, key, s)
+		s, err = u.setSecretTx(ctx, tx, key, envID, name, value, typ, desc)
+		return err
 	})
 	if err != nil {
 		return domain.Secret{}, err
@@ -98,7 +89,12 @@ func (u *Unlocked) DeleteSecret(ctx context.Context, envID domain.ID[domain.Envi
 		if !ok {
 			return fmt.Errorf("secret: %w", domain.ErrNotFound)
 		}
-		return tx.Delete(ctx, KindSecret, string(s.ID))
+		if err := tx.Delete(ctx, KindSecret, string(s.ID)); err != nil {
+			return err
+		}
+		return u.recordHistoryTx(ctx, tx, key, historyRec{
+			HistoryEntry: HistoryEntry{EnvID: envID, Op: OpSecretDelete, SecretName: name, PrevValue: s.Value},
+			PrevType:     s.Type, PrevDesc: s.Description})
 	})
 }
 
