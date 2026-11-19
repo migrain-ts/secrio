@@ -79,6 +79,28 @@ func (u *Unlocked) ListSecrets(ctx context.Context, envID domain.ID[domain.Envir
 	return u.listSecrets(ctx, envID)
 }
 
+// SecretCount returns how many secrets the environment holds, without
+// decrypting anything: it only checks that the environment exists and counts
+// its secret records.
+func (u *Unlocked) SecretCount(ctx context.Context, envID domain.ID[domain.Environment]) (int, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return 0, lerr
+	}
+	defer done()
+	if _, err := u.store.Get(ctx, KindEnvironment, string(envID)); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return 0, fmt.Errorf("environment: %w", domain.ErrNotFound)
+		}
+		return 0, err
+	}
+	recs, err := u.store.List(ctx, KindSecret, string(envID))
+	if err != nil {
+		return 0, err
+	}
+	return len(recs), nil
+}
+
 // listSecrets is ListSecrets without the lifecycle guard, for methods that
 // already hold it.
 func (u *Unlocked) listSecrets(ctx context.Context, envID domain.ID[domain.Environment]) ([]domain.Secret, error) {

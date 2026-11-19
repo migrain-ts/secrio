@@ -356,3 +356,134 @@ func TestErrorsNeverContainValue(t *testing.T) {
 		}
 	}
 }
+
+func mustCount(t *testing.T, u *Unlocked, e domain.Environment) int {
+	t.Helper()
+	n, err := u.SecretCount(context.Background(), e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestSecretCountEmptyAndFilled(t *testing.T) {
+	ctx := context.Background()
+	u, _ := newHarness(t).unlocked(t)
+	_, e := newEnv(t, u, "p", "Development")
+	if n := mustCount(t, u, e); n != 0 {
+		t.Fatalf("empty = %d", n)
+	}
+	for _, name := range []domain.SecretName{"A", "B", "C"} {
+		if _, err := u.SetSecret(ctx, e.ID, name, []byte("v"), "", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := mustCount(t, u, e); n != 3 {
+		t.Fatalf("filled = %d", n)
+	}
+	// Upsert does not add.
+	if _, err := u.SetSecret(ctx, e.ID, "A", []byte("v2"), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if n := mustCount(t, u, e); n != 3 {
+		t.Fatalf("after upsert = %d", n)
+	}
+	if err := u.DeleteSecret(ctx, e.ID, "B"); err != nil {
+		t.Fatal(err)
+	}
+	if n := mustCount(t, u, e); n != 2 {
+		t.Fatalf("after delete = %d", n)
+	}
+}
+
+func TestSecretCountUnknownEnv(t *testing.T) {
+	u, _ := newHarness(t).unlocked(t)
+	_, err := u.SecretCount(context.Background(), "nope")
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSecretCountAfterDeleteEnvironment(t *testing.T) {
+	ctx := context.Background()
+	u, _ := newHarness(t).unlocked(t)
+	_, e := newEnv(t, u, "p", "Development")
+	if _, err := u.SetSecret(ctx, e.ID, "A", []byte("v"), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.DeleteEnvironment(ctx, e.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.SecretCount(ctx, e.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSecretCountAfterClose(t *testing.T) {
+	u, _ := newHarness(t).unlocked(t)
+	_, e := newEnv(t, u, "p", "Development")
+	u.Close()
+	if _, err := u.SecretCount(context.Background(), e.ID); !errors.Is(err, domain.ErrLocked) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSecretCountPerEnvIsolated(t *testing.T) {
+	ctx := context.Background()
+	u, _ := newHarness(t).unlocked(t)
+	p, e1 := newEnv(t, u, "p", "Development")
+	e2, err := u.CreateEnvironment(ctx, p.ID, "Production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []domain.SecretName{"A", "B"} {
+		if _, err := u.SetSecret(ctx, e1.ID, n, []byte("v"), "", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := u.SetSecret(ctx, e2.ID, "A", []byte("v"), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if a, b := mustCount(t, u, e1), mustCount(t, u, e2); a != 2 || b != 1 {
+		t.Fatalf("counts = %d, %d", a, b)
+	}
+}
+
+// noOpenCipher fails the test on any Open once armed.
+type noOpenCipher struct {
+	Cipher
+	t     *testing.T
+	armed bool
+}
+
+func (c *noOpenCipher) Open(k domain.Key, sealed, aad []byte) ([]byte, error) {
+	if c.armed {
+		c.t.Errorf("Cipher.Open called")
+	}
+	return c.Cipher.Open(k, sealed, aad)
+}
+
+func TestSecretCountDoesNotDecrypt(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	u, _ := h.unlocked(t)
+	nc := &noOpenCipher{Cipher: u.c, t: t}
+	u.c = nc
+	_, e := newEnv(t, u, "p", "Development")
+	for _, n := range []domain.SecretName{"A", "B", "C"} {
+		if _, err := u.SetSecret(ctx, e.ID, n, []byte("v"), "", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Tamper every secret blob.
+	for k, r := range h.vault().records {
+		if k.kind == KindSecret {
+			r.Blob[len(r.Blob)-1] ^= 0xff
+			h.vault().records[k] = r
+		}
+	}
+	nc.armed = true
+	if n := mustCount(t, u, e); n != 3 {
+		t.Fatalf("count = %d", n)
+	}
+}

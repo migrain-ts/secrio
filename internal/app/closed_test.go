@@ -33,6 +33,7 @@ func closedCalls(u *Unlocked) map[string]func() error {
 		"SetSecret":     func() error { _, err := u.SetSecret(ctx, env, "K", []byte("v"), "", ""); return err },
 		"GetSecret":     func() error { _, err := u.GetSecret(ctx, env, "K"); return err },
 		"ListSecrets":   func() error { _, err := u.ListSecrets(ctx, env); return err },
+		"SecretCount":   func() error { _, err := u.SecretCount(ctx, env); return err },
 		"DeleteSecret":  func() error { return u.DeleteSecret(ctx, env, "K") },
 		"CreateProject": func() error { _, err := u.CreateProject(ctx, "n", ""); return err },
 		"ListProjects":  func() error { _, err := u.ListProjects(ctx); return err },
