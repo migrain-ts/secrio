@@ -4,7 +4,7 @@ Keep this file current: any change to layers, storage, key handling or error sem
 
 ## 1. Purpose
 
-secrio is a local secrets manager. Secrets (name, value, type, description) are grouped as vault > project > environment > secret and stored in one encrypted SQLite file per vault. The core is a Go library (`internal/`); the CLI and the Desktop app are separate front ends that will sit on top of it. No network, no CGO, no server.
+secrio is a local secrets manager. Secrets (name, value, type, description) are grouped as vault > project > environment > secret and stored in one encrypted SQLite file per vault. The core is a Go library (`internal/`); the CLI (`secrio`, section 13) is a front end on top of it, and the Desktop app will be another. No network, no CGO, no server.
 
 ## 2. Layers and dependency rule
 
@@ -33,7 +33,9 @@ domain  <-  app  <-  core (composition root)  ->  infra/*
 | `infra/keychain` | `KeyStore` (OS keychain via go-keyring; holds only a 32-byte session key) and `MemoryKeyStore`; both implement `app.SessionKeys` |
 | `infra/clock` | `System` (UTC now) and `Fake` |
 | `core` | `New`, options, `DefaultDataDir`, `VaultPath` |
-| `tests` | Black-box end-to-end and security tests through `core.New` |
+| `cmd/secrio` | The CLI binary: `main` only calls `cli.Execute(cli.RealDeps(), os.Args[1:])` and exits with its code |
+| `cli` (`internal/cli`) | Cobra command layer: one file per command, all I/O through `Deps`, no business logic; imports `core`, `app` and `domain`, never `infra` (section 13) |
+| `tests` | Black-box end-to-end and security tests through `core.New`, plus tests of the real `secrio` binary |
 
 `core.New(dataDir, opts...)` creates `dataDir` (0700) and builds: `crypto.Suite{}` as cipher and KDF, `sqlite.Opener{}`, `registry.New(dataDir)`, `keychain.New("secrio")`, `clock.System{}`, `crypto.DefaultKDFParams()`. Options: `WithKDFParams`, `WithSessionKeys`, `WithClock`. `VaultPath(dataDir, name)` returns `<dataDir>/vaults/<name>.db` (vaults dir 0700) and rejects empty names, `/`, `\`, `..` and NUL.
 
@@ -156,6 +158,7 @@ Error text never contains secret names, values, passwords or file content (drive
 
 - Unit tests per package with fakes: `app` runs on an in-memory record store, cheap test cipher and KDF, fake clock, fake registry and sessions; `infra/*` test their adapters (including real SQLite files in temp dirs and the go-keyring mock).
 - `tests/` is black-box: real adapters through `core.New`, `t.TempDir()`, `keyring.MockInit()` and cheap KDF params `{Time:1, MemoryKiB:8, Threads:1}`. It covers the end-to-end flow, plaintext absence in the `.db`, `-wal` and `-shm` files, file modes, blob corruption and blob swapping via raw SQL, future format versions, garbage files, log hygiene, session hardening (what the keychain and the `sessions` row hold, a leaked key after `Lock`, orphan halves, TTL and idle expiry with a fake clock, shared and killed sessions across two services; `tests/session_test.go`), concurrent writers (run under `-race`; the go-keyring mock is not goroutine-safe, so that test shares a `MemoryKeyStore`) and a real child process receiving secrets.
+- `internal/cli` unit tests run the commands in-process with injected `Deps` (fake TTY flags, in-memory keychain, a fake or real runner). `tests/cli_binary_test.go` builds the real binary once in `TestMain` (`CGO_ENABLED=0`) and runs it with an explicit minimal environment (`SECRIO_HOME`, `SECRIO_PASSWORD`, `HOME`, `PATH`): full flow, exit codes, `.secrio.toml` lookup from a subdirectory, no secret in argv, error output free of passwords and values. These tests never call `unlock` or `lock`, because the binary would use the real OS keychain; session behaviour is covered in-process.
 - Checks before every commit: `gofmt -l .` empty, `go vet ./...`, `go test -race -count=1 ./...`.
 
 ## 12. How CLI and Desktop plug in
@@ -166,4 +169,27 @@ Both front ends:
 2. Create vaults at `core.VaultPath(dir, name)`, then `Unlock`, `Open` (or `OpenWithPassword` for one-shot use), call `Unlocked` methods, and `Close` the handle.
 3. Map the errors in section 7 to messages and exit codes; they never import `internal/infra`.
 
-CLI `run` = `Open` + `ProcessEnv(os.Environ())` + `os/exec`, propagating the child's exit code. Desktop keeps a long-lived `Service` and calls `Lock` on demand, but must not keep a long-lived `Unlocked`: an open handle ignores `Lock`, TTL and idle expiry (section 6) and does not refresh `LastUsed`, so it calls `Open` per operation or short burst and closes the handle right after. Neither front end exists yet.
+CLI `run` = `Open` + `ProcessEnv(os.Environ())` + `os/exec`, propagating the child's exit code (details in section 13). Desktop keeps a long-lived `Service` and calls `Lock` on demand, but must not keep a long-lived `Unlocked`: an open handle ignores `Lock`, TTL and idle expiry (section 6) and does not refresh `LastUsed`, so it calls `Open` per operation or short burst and closes the handle right after. The CLI exists (section 13); the Desktop does not yet.
+
+## 13. CLI
+
+Commands: `vault create|list`, `unlock`, `lock`, `project create`, `env create`, `list`, `set`, `get`, `run`, plus Cobra's `completion` and `help`. User-facing documentation is in `README.md`.
+
+- Wiring: `cmd/secrio/main.go` calls `cli.Execute(cli.RealDeps(), os.Args[1:])`. `Deps` (`deps.go`) injects every side effect: `In`/`Out`/`Err`, `Getenv`, `Environ`, `Getwd`, `StdinTTY`, `StdoutTTY`, `ReadPassword` (masked, from the terminal), `DataDir`, `NewService` (wraps `core.New`) and `Run` (the child-process runner). `RealDeps` binds them to the process; the data dir is `SECRIO_HOME` if set, else `core.DefaultDataDir()`. Tests pass fakes.
+- Commands: `NewRoot` (`cli.go`) builds the root and attaches the subcommands in one explicit constructor block, one `newXxxCmd(d, &flags)` per line. There is no registry or `init()` list.
+- Argument errors: `finalize` runs `usageArgs` over the whole tree, including Cobra's built-in `completion` and `help` commands. It makes every argument-validation error exit 2: a group command (has subcommands, no `Args`) rejects positional arguments as an unknown command; a leaf without `Args` defaults to `cobra.NoArgs`; any other `Args` error is wrapped as a usage error unless it already carries an `*ExitError`. Flag-parse errors are mapped to usage errors through `SetFlagErrorFunc`. Required flags are not used: commands validate the context themselves and return `UsageErr`.
+- Context: `--vault`, `--project` and `--env` are persistent flags. `LoadContext` resolves each field on its own: flag, then `SECRIO_VAULT` / `SECRIO_PROJECT` / `SECRIO_ENV`, then the nearest `.secrio.toml` (keys `vault`, `project`, `env`), searched from the working directory upwards, first file found wins. The file is read only when a field is still empty, is decoded strictly (unknown keys are an error) and errors name the path and position, never file content. A missing field gives a usage error (exit 2) naming the flag, variable and file.
+- Unlocking: `openVault` tries the session first (`Service.Open`). Only when that returns `ErrLocked` and `SECRIO_PASSWORD` is set does it use `OpenWithPassword`, which creates no session; with no password the error is exit 3. `unlock` and `vault create` read the password from `SECRIO_PASSWORD` or, with a terminal, a masked prompt (`vault create` asks twice); without a terminal and without the variable they fail with exit 3 and never wait for input. `vault create` checks the name against `^[A-Za-z0-9._-]{1,64}$` (not `.` or `..`) and that no vault of that name is registered.
+- Values: `set` reads a masked prompt when stdin is a terminal, else stdin (at most 1 MiB; one trailing `\n` or `\r\n` removed); it ignores `SECRIO_PASSWORD`, refuses an empty value (exit 1) and never takes a value from an argument. `get` writes the raw bytes and a `\n` only when stdout is a terminal. `list` prints sorted names at the depth the context gives (vaults need `vault list`; no project: projects; project: environments; project and env: secret names) and never values. `--env` without a project is a usage error.
+
+Exit codes (outside `run`): 0 success; 1 any other error; 2 usage error (`ExitError` code 2, or an error wrapping `ErrInvalidArgument`); 3 locked or wrong password (`ExitError` code 3, `ErrLocked`, `ErrInvalidPassword`). `Execute` prints `secrio: <message>` to stderr, except for a code-only `ExitError` (the child's status).
+
+`run` (`run.go`, `runner.go`):
+
+- Needs `--` before the command (otherwise exit 2). Secrio failures before the child starts, other than usage errors, exit 125 (including an unknown project or environment, a locked vault, a wrong password).
+- The child's environment is `Environ()` without `SECRIO_PASSWORD`, merged with the environment's secrets by `ProcessEnv`. The vault is closed (`defer u.Close()` in `runEnvironment`) before the runner starts the child, so the vault key is not held while the child runs.
+- The command is looked up with `exec.Command` using secrio's own `PATH`, not a `PATH` secret of the environment. stdin, stdout and stderr are passed straight through.
+- Exit code: the child's own code; 127 when the command is not found; 126 when it cannot be executed; 128+N when killed by signal N (Unix; Windows has no signal case); 125 for a failure of the runner itself such as a stdio copy error.
+- Signals: while the child runs, secrio catches SIGTERM and relays it always, so the child can shut down and secrio reports its status. SIGINT is relayed only when no terminal is attached to stdin, stdout or stderr: on a terminal, Ctrl-C already reaches the child through the foreground process group, and relaying it again would deliver it twice.
+
+What the CLI deliberately does not do: put values, passwords or keys in argv, errors or logs; prompt without a terminal; offer import, export, edit, delete, history, compare or change-password commands (the library supports them, no command exists yet); read a value from a flag or argument; keep a long-lived `Unlocked` (each command opens, works and closes); import `internal/infra`.
