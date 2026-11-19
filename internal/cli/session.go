@@ -9,17 +9,22 @@ import (
 	"secrio/internal/domain"
 )
 
-// openVault opens the vault using its session. When the vault is locked and
-// SECRIO_PASSWORD is set it opens with the password instead (no session is
-// created); otherwise it fails with the "locked" exit code.
+// openVault opens the vault using its session. When that fails for any reason
+// (locked, keychain unavailable, damaged session) and SECRIO_PASSWORD is set,
+// it opens with the password instead (no session is created). Without the
+// variable, a locked vault fails with the "locked" exit code and any other
+// error is returned as is.
 func openVault(ctx context.Context, d Deps, svc *app.Service, entry app.VaultEntry) (*app.Unlocked, error) {
 	u, err := svc.Open(ctx, entry.ID)
-	if err == nil || !errors.Is(err, domain.ErrLocked) {
-		return u, err
+	if err == nil {
+		return u, nil
 	}
 	env := d.Getenv("SECRIO_PASSWORD")
 	if env == "" {
-		return nil, LockedErr(fmt.Errorf("vault %q is locked: run `secrio unlock`", entry.Name))
+		if errors.Is(err, domain.ErrLocked) {
+			return nil, LockedErr(fmt.Errorf("vault %q is locked: run `secrio unlock`", entry.Name))
+		}
+		return nil, err
 	}
 	pw := []byte(env)
 	defer clear(pw)
