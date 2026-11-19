@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Vault struct {
 	ID        ID[Vault]
@@ -49,3 +52,6 @@ const redactedSecret = "Secret{<redacted>}"
 
 func (Secret) String() string   { return redactedSecret }
 func (Secret) GoString() string { return redactedSecret }
+
+// Format redacts the secret for every fmt verb (including %d, %x and %+v).
+func (Secret) Format(f fmt.State, _ rune) { _, _ = f.Write([]byte(redactedSecret)) }

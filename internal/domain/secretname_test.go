@@ -46,6 +46,22 @@ func TestSecretFormatRedacted(t *testing.T) {
 	}
 }
 
+func TestSecretFormatRedactsAllVerbs(t *testing.T) {
+	val := []byte("supersecret")
+	s := Secret{Value: val}
+	out := fmt.Sprintf("%d %x %+v %v %#v %s %X %q", s, s, s, s, s, s, s, s)
+	dec := strings.Trim(fmt.Sprint(val), "[]") // "115 117 112 ..."
+	hexs := fmt.Sprintf("%x", val)             // "7375706572..."
+	for _, bad := range []string{"supersecret", dec, "115 117", hexs, "73757065"} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(bad)) {
+			t.Fatalf("leaked %q in %s", bad, out)
+		}
+	}
+	if strings.Count(out, "Secret{<redacted>}") != 8 {
+		t.Fatalf("not redacted: %s", out)
+	}
+}
+
 func TestKeyFormatRedacted(t *testing.T) {
 	var k Key
 	k[0] = 0xAB
