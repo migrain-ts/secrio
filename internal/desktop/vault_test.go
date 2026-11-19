@@ -245,8 +245,8 @@ func TestCurrentVaultRules(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
+	newTestApp(t).app.Shutdown() // no vault: safe
 	env := newTestApp(t)
-	env.app.Shutdown() // no vault: safe
 	mustCreate(t, env, "work")
 	env.app.Shutdown()
 	env.app.Shutdown() // idempotent

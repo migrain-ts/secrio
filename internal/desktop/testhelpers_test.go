@@ -22,6 +22,27 @@ const testPassword = "correct horse battery staple"
 type countingKeys struct {
 	*keychain.MemoryKeyStore
 	loads atomic.Int32
+
+	failSave    atomic.Bool // Save fails
+	panicDelete atomic.Bool // Delete panics (a crash in the lock path)
+	onSave      func()      // runs at the start of Save; set before use
+}
+
+func (c *countingKeys) Save(ctx context.Context, id string, k domain.Key) error {
+	if c.onSave != nil {
+		c.onSave()
+	}
+	if c.failSave.Load() {
+		return errors.New("keychain unavailable")
+	}
+	return c.MemoryKeyStore.Save(ctx, id, k)
+}
+
+func (c *countingKeys) Delete(ctx context.Context, id string) error {
+	if c.panicDelete.Load() {
+		panic("injected")
+	}
+	return c.MemoryKeyStore.Delete(ctx, id)
 }
 
 func (c *countingKeys) Load(ctx context.Context, id string) (domain.Key, error) {

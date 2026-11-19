@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -18,9 +19,11 @@ import (
 type App struct {
 	deps Deps
 
-	mu      sync.Mutex // guards svc and current
-	svc     *app.Service
-	current string // selected vault id
+	mu       sync.Mutex // guards svc, current, unlocked and closed
+	svc      *app.Service
+	current  string          // selected vault id
+	unlocked map[string]bool // vaults this App unlocked; Shutdown locks them
+	closed   bool            // set by Shutdown
 
 	clip clipState // our last clipboard copy (hash only)
 }
@@ -74,15 +77,33 @@ func (a *App) getCurrent() string {
 	return a.current
 }
 
-// selectEntry remembers id in memory and in desktop.json.
-func (a *App) selectEntry(id string) error {
-	dir, err := a.dataDir()
-	if err != nil {
-		return err
-	}
+// selectEntry remembers id in memory and, best effort, in desktop.json: a
+// failed write only loses the preference for the next start.
+func (a *App) selectEntry(id string) {
 	a.setCurrent(id)
-	if err := savePrefs(dir, prefs{LastVault: id}); err != nil {
+	if dir, err := a.dataDir(); err == nil {
+		_ = savePrefs(dir, prefs{LastVault: id})
+	}
+}
+
+// unlockVault opens a session and records it for Shutdown. A session that
+// opens after Shutdown (a slow key derivation) is locked again at once.
+func (a *App) unlockVault(ctx context.Context, svc *app.Service, id string, pw []byte) error {
+	if err := svc.Unlock(ctx, id, pw, sessionTTL, sessionIdle); err != nil {
 		return toAPIError(err)
+	}
+	a.mu.Lock()
+	closed := a.closed
+	if !closed {
+		if a.unlocked == nil {
+			a.unlocked = map[string]bool{}
+		}
+		a.unlocked[id] = true
+	}
+	a.mu.Unlock()
+	if closed {
+		_ = svc.Lock(ctx, id)
+		return newAPIError(CodeLocked, "vault is locked")
 	}
 	return nil
 }
@@ -128,9 +149,7 @@ func (a *App) resolveCurrent(ctx context.Context, svc *app.Service) (app.VaultEn
 		return e, true, nil
 	}
 	if len(es) == 1 {
-		if err := a.selectEntry(es[0].ID); err != nil {
-			return app.VaultEntry{}, false, err
-		}
+		a.selectEntry(es[0].ID)
 		return es[0], true, nil
 	}
 	return app.VaultEntry{}, false, nil
@@ -233,10 +252,8 @@ func (a *App) CreateVault(name, password string) (VaultDTO, error) {
 		return VaultDTO{}, toAPIError(err)
 	}
 	id := string(v.ID)
-	if err := svc.Unlock(ctx, id, pw, sessionTTL, sessionIdle); err != nil {
-		return VaultDTO{}, toAPIError(err)
-	}
-	if err := a.selectEntry(id); err != nil {
+	a.selectEntry(id) // before unlocking: on failure the user retries Unlock
+	if err := a.unlockVault(ctx, svc, id, pw); err != nil {
 		return VaultDTO{}, err
 	}
 	return VaultDTO{ID: id, Name: name}, nil
@@ -250,14 +267,17 @@ func (a *App) Unlock(vaultID, password string) error {
 	}
 	pw := []byte(password)
 	defer clear(pw)
-	if err := svc.Unlock(context.Background(), vaultID, pw, sessionTTL, sessionIdle); err != nil {
-		return toAPIError(err)
+	if err := a.unlockVault(context.Background(), svc, vaultID, pw); err != nil {
+		return err
 	}
-	return a.selectEntry(vaultID)
+	a.selectEntry(vaultID)
+	return nil
 }
 
-// Lock ends the current vault's session and clears our clipboard copy.
+// Lock ends the current vault's session and clears our clipboard copy (on
+// every path, errors included).
 func (a *App) Lock() error {
+	defer a.clearOurClipboard()
 	svc, err := a.service()
 	if err != nil {
 		return err
@@ -270,9 +290,7 @@ func (a *App) Lock() error {
 	if !ok {
 		return newAPIError(CodeNoVault, "no vault selected")
 	}
-	lerr := svc.Lock(ctx, e.ID)
-	a.clearOurClipboard()
-	return toAPIError(lerr)
+	return toAPIError(svc.Lock(ctx, e.ID))
 }
 
 // SelectVault makes vaultID current and remembers it.
@@ -288,7 +306,8 @@ func (a *App) SelectVault(vaultID string) error {
 	if _, ok := findEntry(es, vaultID); !ok {
 		return newAPIError(CodeNotFound, "not found")
 	}
-	return a.selectEntry(vaultID)
+	a.selectEntry(vaultID)
+	return nil
 }
 
 // CurrentVault reports the current vault and whether its session is open.
@@ -314,15 +333,43 @@ func (a *App) CurrentVault() (VaultDTO, bool, error) {
 	return dto, true, nil
 }
 
-// Shutdown locks the current vault and clears our clipboard copy. It is
-// idempotent and never fails.
+// Shutdown locks every vault this App unlocked plus the current one, and
+// clears our clipboard copy. It never writes desktop.json, is idempotent and
+// never fails. The clipboard is cleared even if locking panics.
 func (a *App) Shutdown() {
+	defer func() {
+		defer func() { _ = recover() }()
+		a.clearOurClipboard()
+	}()
 	defer func() { _ = recover() }()
-	if svc, err := a.service(); err == nil {
-		ctx := context.Background()
-		if e, ok, err := a.resolveCurrent(ctx, svc); err == nil && ok {
-			_ = svc.Lock(ctx, e.ID)
+	a.mu.Lock()
+	a.closed = true
+	ids := make([]string, 0, len(a.unlocked)+1)
+	for id := range a.unlocked {
+		ids = append(ids, id)
+	}
+	cur := a.current
+	a.mu.Unlock()
+	if cur == "" { // read-only lookup, never the persisting resolveCurrent
+		if dir, err := a.dataDir(); err == nil {
+			cur = loadPrefs(dir).LastVault
 		}
 	}
-	a.clearOurClipboard()
+	if cur != "" && !slices.Contains(ids, cur) {
+		ids = append(ids, cur)
+	}
+	if len(ids) == 0 {
+		return
+	}
+	svc, err := a.service()
+	if err != nil {
+		return
+	}
+	ctx := context.Background()
+	for _, id := range ids { // one failing vault must not skip the others
+		func() {
+			defer func() { _ = recover() }()
+			_ = svc.Lock(ctx, id)
+		}()
+	}
 }
