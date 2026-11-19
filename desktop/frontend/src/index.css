@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+
+/* Placeholder dark base; the Linear theme replaces this in Task 9. */
+:root {
+  color-scheme: dark;
+  background-color: #08090a;
+  color: #f7f8f8;
+}
+
+body {
+  margin: 0;
+  background-color: #08090a;
+}
