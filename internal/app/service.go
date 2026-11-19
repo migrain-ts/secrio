@@ -126,16 +126,19 @@ func (s *Service) openStore(ctx context.Context, vaultID string) (RecordStore, V
 }
 
 // Unlock verifies password and persists a session valid for ttl, ending
-// early after idle without use (idle <= 0 disables the idle timeout).
+// early after idle without use (idle == 0 disables the idle timeout; ttl <= 0 or idle < 0 is
+// domain.ErrInvalidArgument).
 //
 // A fresh random session key goes to SessionKeys; the vault key is stored
 // sealed under it in the vault file's session row. The keychain never holds
 // the vault key.
 func (s *Service) Unlock(ctx context.Context, vaultID string, password []byte, ttl, idle time.Duration) (err error) {
 	if ttl <= 0 {
-		return errors.New("session ttl must be positive")
+		return fmt.Errorf("%w: session ttl must be positive", domain.ErrInvalidArgument)
 	}
-	idle = max(idle, 0)
+	if idle < 0 {
+		return fmt.Errorf("%w: session idle must not be negative", domain.ErrInvalidArgument)
+	}
 	st, meta, err := s.openStore(ctx, vaultID)
 	if err != nil {
 		return err

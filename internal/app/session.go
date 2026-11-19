@@ -48,7 +48,7 @@ func (u *Unlocked) Close() error {
 }
 
 // Open returns a handle from the persisted session. A missing, expired
-// (TTL), idle or damaged session yields domain.ErrLocked and whatever is left
+// (TTL), idle or damaged session, or a damaged keychain item, yields domain.ErrLocked and whatever is left
 // of it (row or key) is deleted. Success refreshes the session's LastUsed.
 //
 // The refresh is one atomic conditional update in the vault file, so a Lock
@@ -70,6 +70,11 @@ func (s *Service) Open(ctx context.Context, vaultID string) (_ *Unlocked, err er
 	if errors.Is(err, domain.ErrLocked) {
 		// No key: any row left is useless, delete it.
 		return nil, errors.Join(domain.ErrLocked, st.DeleteSession(ctx))
+	}
+	if errors.Is(err, domain.ErrCorrupt) {
+		// Damaged item (or a legacy raw-vault-key item): it can never open
+		// the session, so end it.
+		return nil, errors.Join(domain.ErrLocked, s.killSession(ctx, st, vaultID))
 	}
 	if err != nil {
 		return nil, err // keychain trouble: keep the row

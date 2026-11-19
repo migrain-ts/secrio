@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -84,18 +85,22 @@ func TestUnlockThenOpen(t *testing.T) {
 	}
 }
 
-func TestUnlockNonPositiveTTL(t *testing.T) {
+func TestUnlockInvalidDurations(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	id := h.newVault(t)
-	for _, ttl := range []time.Duration{0, -time.Second} {
-		err := h.svc.Unlock(ctx, id, []byte(testPw), ttl, 0)
-		if err == nil || errors.Is(err, domain.ErrLocked) {
-			t.Fatalf("ttl %v: %v", ttl, err)
+	for name, d := range map[string][2]time.Duration{
+		"zero ttl":      {0, 0},
+		"negative ttl":  {-time.Second, 0},
+		"negative idle": {time.Hour, -time.Second},
+	} {
+		err := h.svc.Unlock(ctx, id, []byte(testPw), d[0], d[1])
+		if !errors.Is(err, domain.ErrInvalidArgument) || errors.Is(err, domain.ErrLocked) {
+			t.Fatalf("%s: %v", name, err)
 		}
 		// Checked before anything else: even an unknown vault reports it.
-		if err := h.svc.Unlock(ctx, "nope", []byte(testPw), ttl, 0); err == nil || errors.Is(err, domain.ErrNotFound) {
-			t.Fatalf("ttl %v unknown vault: %v", ttl, err)
+		if err := h.svc.Unlock(ctx, "nope", []byte(testPw), d[0], d[1]); !errors.Is(err, domain.ErrInvalidArgument) {
+			t.Fatalf("%s unknown vault: %v", name, err)
 		}
 	}
 	h.assertNoSession(t, id)
@@ -390,4 +395,22 @@ func TestLockNotUndoneByConcurrentOpen(t *testing.T) {
 	_, err := h.svc.Open(ctx, id)
 	assertLocked(t, err)
 	h.assertNoSession(t, id)
+}
+
+func TestOpenCorruptKeychainItemIsLockedAndPurged(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	id := h.newVault(t)
+	h.unlock(t, id, time.Hour, 0)
+	h.keys.loadErr = fmt.Errorf("item damaged: %w", domain.ErrCorrupt)
+	_, err := h.svc.Open(ctx, id)
+	if !errors.Is(err, domain.ErrLocked) {
+		t.Fatalf("got %v, want ErrLocked", err)
+	}
+	if h.vault().session != nil {
+		t.Error("row kept")
+	}
+	if _, ok := h.keys.m[id]; ok {
+		t.Error("key kept")
+	}
 }
