@@ -3,6 +3,8 @@ package app
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"secrio/internal/domain"
 )
@@ -19,9 +21,17 @@ const (
 	maxKDFMemoryKiB = 1 << 20 // 1 GiB cap against hostile vault files
 )
 
-// sessionAAD binds a session blob to its vault, so a session row and key
-// grafted from another vault do not open.
-func sessionAAD(vaultID string) []byte { return []byte("session|" + vaultID) }
+// sessionAAD binds a session blob to its vault and to the row's expiry and
+// idle limit (unix ms, as stored; a positive sub-ms idle counts as 1 ms). A
+// row grafted from another vault, or one whose expires_at or idle_ms was
+// edited in the file, does not authenticate.
+func sessionAAD(vaultID string, expiresAt time.Time, idle time.Duration) []byte {
+	idleMs := idle.Milliseconds()
+	if idle > 0 && idleMs < 1 {
+		idleMs = 1
+	}
+	return []byte("session|" + vaultID + "|" + strconv.FormatInt(expiresAt.UnixMilli(), 10) + "|" + strconv.FormatInt(idleMs, 10))
+}
 
 // zeroKey clears a key held in memory.
 func zeroKey(k *domain.Key) { *k = domain.Key{} }

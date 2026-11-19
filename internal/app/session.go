@@ -86,7 +86,7 @@ func (s *Service) Open(ctx context.Context, vaultID string) (_ *Unlocked, err er
 	if err != nil {
 		return nil, err // ErrLocked when a Lock deleted the row after Touch
 	}
-	pt, err := s.c.Open(sk, row.Blob, sessionAAD(vaultID))
+	pt, err := s.c.Open(sk, row.Blob, sessionAAD(vaultID, row.ExpiresAt, row.Idle))
 	if err != nil { // tampered, truncated or from another vault
 		return nil, errors.Join(domain.ErrLocked, s.killSession(ctx, st, vaultID))
 	}

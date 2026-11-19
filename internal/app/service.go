@@ -151,12 +151,13 @@ func (s *Service) Unlock(ctx context.Context, vaultID string, password []byte, t
 		return fmt.Errorf("session key: %w", err)
 	}
 	defer zeroKey(&sk)
-	blob, err := s.c.Seal(sk, vk[:], sessionAAD(vaultID))
+	now := s.clock.Now()
+	expires := now.Add(ttl)
+	blob, err := s.c.Seal(sk, vk[:], sessionAAD(vaultID, expires, idle))
 	if err != nil {
 		return fmt.Errorf("seal session: %w", err)
 	}
-	now := s.clock.Now()
-	if err := st.PutSession(ctx, SessionRow{Blob: blob, ExpiresAt: now.Add(ttl), LastUsed: now, Idle: idle}); err != nil {
+	if err := st.PutSession(ctx, SessionRow{Blob: blob, ExpiresAt: expires, LastUsed: now, Idle: idle}); err != nil {
 		return err
 	}
 	if err := s.keys.Save(ctx, vaultID, sk); err != nil {
