@@ -29,7 +29,13 @@ func parseDotenv(data []byte) ([]Entry, error) {
 		if !ok {
 			return nil, dotenvErr(n, "missing '='")
 		}
-		v, err := dotenvValue(strings.TrimLeft(val, " \t"), n)
+		trimmed := strings.TrimLeft(val, " \t")
+		var v string
+		var err error
+		// whitespace then '#' is an inline comment: the value is empty
+		if trimmed == val || !strings.HasPrefix(trimmed, "#") {
+			v, err = dotenvValue(trimmed, n)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -82,9 +88,8 @@ func dotenvValue(s string, line int) (string, error) {
 		}
 		return "", dotenvErr(line, "unterminated quote")
 	}
-	if s[0] == '#' {
-		return "", nil
-	}
+	// Unquoted: '#' starts a comment only after whitespace, so a leading
+	// '#' (no whitespace before it) is part of the value.
 	for i := 1; i < len(s); i++ {
 		if s[i] == '#' && (s[i-1] == ' ' || s[i-1] == '\t') {
 			s = s[:i]

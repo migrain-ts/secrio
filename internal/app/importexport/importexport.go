@@ -4,6 +4,7 @@
 package importexport
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sort"
@@ -51,6 +52,7 @@ func Parse(f Format, r io.Reader) ([]Entry, error) {
 	if len(data) > MaxInputBytes {
 		return nil, fmt.Errorf("%w: input exceeds 8 MiB", domain.ErrUnsupportedValue)
 	}
+	data = bytes.TrimPrefix(data, []byte("\xEF\xBB\xBF")) // UTF-8 BOM
 	switch f {
 	case FormatDotenv:
 		return parseDotenv(data)
