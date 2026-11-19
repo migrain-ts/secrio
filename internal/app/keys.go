@@ -19,6 +19,10 @@ const (
 	maxKDFMemoryKiB = 1 << 20 // 1 GiB cap against hostile vault files
 )
 
+// sessionAAD binds a session blob to its vault, so a session row and key
+// grafted from another vault do not open.
+func sessionAAD(vaultID string) []byte { return []byte("session|" + vaultID) }
+
 // zeroKey clears a key held in memory.
 func zeroKey(k *domain.Key) { *k = domain.Key{} }
 

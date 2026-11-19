@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"secrio/internal/domain"
@@ -20,22 +19,17 @@ var DefaultEnvironments = []string{"Development", "Testing", "Staging", "Product
 // Service holds the vault-level use cases (create, unlock, lock, open,
 // change password). Per-vault data operations live on *Unlocked.
 type Service struct {
-	c        Cipher
-	kdf      KDF
-	params   domain.KDFParams // KDF cost for new vaults
-	opener   VaultOpener
-	reg      Registry
-	sessions SessionStore
-	clock    Clock
-
-	// sessionMu serialises session writes (Open's Load..Save, Lock, Unlock)
-	// so a Lock cannot be undone by a concurrent Open in this process. It is
-	// never held while calling back into the caller.
-	sessionMu sync.Mutex
+	c      Cipher
+	kdf    KDF
+	params domain.KDFParams // KDF cost for new vaults
+	opener VaultOpener
+	reg    Registry
+	keys   SessionKeys
+	clock  Clock
 }
 
-func NewService(c Cipher, kdf KDF, p domain.KDFParams, opener VaultOpener, reg Registry, sessions SessionStore, clock Clock) *Service {
-	return &Service{c: c, kdf: kdf, params: p, opener: opener, reg: reg, sessions: sessions, clock: clock}
+func NewService(c Cipher, kdf KDF, p domain.KDFParams, opener VaultOpener, reg Registry, keys SessionKeys, clock Clock) *Service {
+	return &Service{c: c, kdf: kdf, params: p, opener: opener, reg: reg, keys: keys, clock: clock}
 }
 
 // closeInto closes st and joins any close error into *err.
@@ -133,10 +127,15 @@ func (s *Service) openStore(ctx context.Context, vaultID string) (RecordStore, V
 
 // Unlock verifies password and persists a session valid for ttl, ending
 // early after idle without use (idle <= 0 disables the idle timeout).
+//
+// A fresh random session key goes to SessionKeys; the vault key is stored
+// sealed under it in the vault file's session row. The keychain never holds
+// the vault key.
 func (s *Service) Unlock(ctx context.Context, vaultID string, password []byte, ttl, idle time.Duration) (err error) {
 	if ttl <= 0 {
-		return errors.New("session ttl must be positive")
+		return fmt.Errorf("session ttl must be positive")
 	}
+	idle = max(idle, 0)
 	st, meta, err := s.openStore(ctx, vaultID)
 	if err != nil {
 		return err
@@ -147,17 +146,40 @@ func (s *Service) Unlock(ctx context.Context, vaultID string, password []byte, t
 		return err
 	}
 	defer zeroKey(&vk)
-	s.sessionMu.Lock()
-	defer s.sessionMu.Unlock()
+	sk, err := s.c.NewKey()
+	if err != nil {
+		return fmt.Errorf("session key: %w", err)
+	}
+	defer zeroKey(&sk)
+	blob, err := s.c.Seal(sk, vk[:], sessionAAD(vaultID))
+	if err != nil {
+		return fmt.Errorf("seal session: %w", err)
+	}
 	now := s.clock.Now()
-	return s.sessions.Save(ctx, vaultID, Session{VaultKey: vk, ExpiresAt: now.Add(ttl), LastUsed: now, Idle: idle})
+	if err := st.PutSession(ctx, SessionRow{Blob: blob, ExpiresAt: now.Add(ttl), LastUsed: now, Idle: idle}); err != nil {
+		return err
+	}
+	if err := s.keys.Save(ctx, vaultID, sk); err != nil {
+		return errors.Join(err, st.DeleteSession(ctx)) // no row without its key
+	}
+	return nil
 }
 
-// Lock forgets the persisted session of vaultID.
-func (s *Service) Lock(ctx context.Context, vaultID string) error {
-	s.sessionMu.Lock()
-	defer s.sessionMu.Unlock()
-	return s.sessions.Delete(ctx, vaultID)
+// Lock ends the persisted session of vaultID: the session row first (it is
+// the credential), then the session key. It is idempotent. If the vault file
+// cannot be opened, the session key is still deleted.
+func (s *Service) Lock(ctx context.Context, vaultID string) (err error) {
+	st, _, err := s.openStore(ctx, vaultID)
+	if err != nil {
+		return errors.Join(err, s.keys.Delete(ctx, vaultID))
+	}
+	defer closeInto(&err, st)
+	return s.killSession(ctx, st, vaultID)
+}
+
+// killSession deletes both halves of a session: row first, then key.
+func (s *Service) killSession(ctx context.Context, st RecordStore, vaultID string) error {
+	return errors.Join(st.DeleteSession(ctx), s.keys.Delete(ctx, vaultID))
 }
 
 // ChangePassword re-wraps the vault key under newPw. No data record is

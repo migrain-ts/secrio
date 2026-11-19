@@ -199,13 +199,20 @@ func (s *fakeStore) PutSession(_ context.Context, r SessionRow) error {
 	if err := s.check(); err != nil {
 		return err
 	}
+	// Normalise like SQLite: times in unix ms (UTC), Idle in whole ms with a
+	// positive sub-ms Idle stored as 1 ms.
 	r.Blob = bytes.Clone(r.Blob)
+	r.ExpiresAt, r.LastUsed = msUTC(r.ExpiresAt), msUTC(r.LastUsed)
 	if r.Idle > 0 && r.Idle < time.Millisecond {
 		r.Idle = time.Millisecond
 	}
+	r.Idle = r.Idle.Truncate(time.Millisecond)
 	s.v.session = &r
 	return nil
 }
+
+// msUTC truncates t to unix milliseconds in UTC, as the SQLite store does.
+func msUTC(t time.Time) time.Time { return time.UnixMilli(t.UnixMilli()).UTC() }
 
 func (s *fakeStore) GetSession(context.Context) (SessionRow, error) {
 	if err := s.check(); err != nil {
@@ -229,7 +236,7 @@ func (s *fakeStore) TouchSession(_ context.Context, now time.Time) (bool, error)
 		return false, nil
 	}
 	u := *r // copy: Tx snapshot holds the old pointer
-	u.LastUsed = now
+	u.LastUsed = msUTC(now)
 	s.v.session = &u
 	return true, nil
 }
@@ -262,7 +269,7 @@ func (v *fakeVault) countRecords(kind Kind) int {
 	return n
 }
 
-// --- Fake opener, registry, sessions ---
+// --- Fake opener, registry, session keys ---
 
 type fakeOpener struct{ files map[string]*fakeVault }
 
@@ -301,22 +308,36 @@ func (r *fakeRegistry) Remove(_ context.Context, id string) error {
 	return nil
 }
 
-type fakeSessions struct{ m map[string]Session }
+// fakeKeys is an in-memory SessionKeys. saved records every key ever saved;
+// saveErr and loadErr inject failures.
+type fakeKeys struct {
+	m       map[string]domain.Key
+	saved   []domain.Key
+	saveErr error
+	loadErr error
+}
 
-func (f *fakeSessions) Save(_ context.Context, id string, s Session) error {
-	f.m[id] = s
+func (f *fakeKeys) Save(_ context.Context, id string, k domain.Key) error {
+	if f.saveErr != nil {
+		return f.saveErr
+	}
+	f.saved = append(f.saved, k)
+	f.m[id] = k
 	return nil
 }
 
-func (f *fakeSessions) Load(_ context.Context, id string) (Session, error) {
-	s, ok := f.m[id]
-	if !ok {
-		return Session{}, domain.ErrLocked
+func (f *fakeKeys) Load(_ context.Context, id string) (domain.Key, error) {
+	if f.loadErr != nil {
+		return domain.Key{}, f.loadErr
 	}
-	return s, nil
+	k, ok := f.m[id]
+	if !ok {
+		return domain.Key{}, domain.ErrLocked
+	}
+	return k, nil
 }
 
-func (f *fakeSessions) Delete(_ context.Context, id string) error {
+func (f *fakeKeys) Delete(_ context.Context, id string) error {
 	delete(f.m, id)
 	return nil
 }
@@ -324,22 +345,22 @@ func (f *fakeSessions) Delete(_ context.Context, id string) error {
 // --- Harness ---
 
 type harness struct {
-	svc      *Service
-	clock    *fakeClock
-	opener   *fakeOpener
-	reg      *fakeRegistry
-	sessions *fakeSessions
+	svc    *Service
+	clock  *fakeClock
+	opener *fakeOpener
+	reg    *fakeRegistry
+	keys   *fakeKeys
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	h := &harness{
-		clock:    &fakeClock{t: time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)},
-		opener:   &fakeOpener{files: map[string]*fakeVault{}},
-		reg:      &fakeRegistry{},
-		sessions: &fakeSessions{m: map[string]Session{}},
+		clock:  &fakeClock{t: time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)},
+		opener: &fakeOpener{files: map[string]*fakeVault{}},
+		reg:    &fakeRegistry{},
+		keys:   &fakeKeys{m: map[string]domain.Key{}},
 	}
-	h.svc = NewService(newTestCipher(), newTestKDF(), testParams, h.opener, h.reg, h.sessions, h.clock)
+	h.svc = NewService(newTestCipher(), newTestKDF(), testParams, h.opener, h.reg, h.keys, h.clock)
 	t.Cleanup(func() {
 		for path, v := range h.opener.files {
 			if v.handles != 0 {

@@ -91,17 +91,14 @@ type RecordStore interface {
 
 // --- Sessions ---
 
-type Session struct {
-	VaultKey  domain.Key
-	ExpiresAt time.Time
-	LastUsed  time.Time
-	Idle      time.Duration
-}
-
-type SessionStore interface {
-	Save(ctx context.Context, vaultID string, s Session) error
+// SessionKeys keeps one random per-session key per vault (the OS keychain in
+// production). It never holds the vault key: that lives sealed under the
+// session key in the vault file's session row.
+type SessionKeys interface {
+	Save(ctx context.Context, vaultID string, k domain.Key) error
 	// Load returns domain.ErrLocked on a miss.
-	Load(ctx context.Context, vaultID string) (Session, error)
+	Load(ctx context.Context, vaultID string) (domain.Key, error)
+	// Delete is idempotent: deleting a missing key is not an error.
 	Delete(ctx context.Context, vaultID string) error
 }
 

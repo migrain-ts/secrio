@@ -2,10 +2,10 @@ package keychain
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/zalando/go-keyring"
 
@@ -14,20 +14,19 @@ import (
 )
 
 var (
-	_ app.SessionStore = (*SessionStore)(nil)
-	_ app.SessionStore = (*MemorySessionStore)(nil)
+	_ app.SessionKeys = (*KeyStore)(nil)
+	_ app.SessionKeys = (*MemoryKeyStore)(nil)
 )
 
-func sample() app.Session {
+func sampleKey() domain.Key {
 	var k domain.Key
 	for i := range k {
 		k[i] = byte(i + 1)
 	}
-	base := time.Date(2026, 11, 19, 10, 11, 12, 123456789, time.UTC)
-	return app.Session{VaultKey: k, ExpiresAt: base.Add(time.Hour), LastUsed: base, Idle: 15*time.Minute + 7}
+	return k
 }
 
-func check(t *testing.T, name string, s app.SessionStore) {
+func check(t *testing.T, name string, s app.SessionKeys) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := s.Load(ctx, "v1"); !errors.Is(err, domain.ErrLocked) {
@@ -36,22 +35,25 @@ func check(t *testing.T, name string, s app.SessionStore) {
 	if err := s.Delete(ctx, "v1"); err != nil {
 		t.Fatalf("%s delete missing: %v", name, err)
 	}
-	in := sample()
+	in := sampleKey()
 	if err := s.Save(ctx, "v1", in); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := s.Load(ctx, "v2"); !errors.Is(err, domain.ErrLocked) {
+		t.Fatalf("%s other vault: want ErrLocked, got %v", name, err)
 	}
 	out, err := s.Load(ctx, "v1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.VaultKey != in.VaultKey || !out.ExpiresAt.Equal(in.ExpiresAt) || !out.LastUsed.Equal(in.LastUsed) || out.Idle != in.Idle {
+	if out != in {
 		t.Fatalf("%s round trip mismatch", name)
-	}
-	if out.LastUsed.Nanosecond() != 123456789 {
-		t.Fatalf("%s lost nanoseconds", name)
 	}
 	if err := s.Delete(ctx, "v1"); err != nil {
 		t.Fatal(err)
+	}
+	if err := s.Delete(ctx, "v1"); err != nil {
+		t.Fatalf("%s second delete: %v", name, err)
 	}
 	if _, err := s.Load(ctx, "v1"); !errors.Is(err, domain.ErrLocked) {
 		t.Fatalf("%s after delete: %v", name, err)
@@ -65,19 +67,25 @@ func TestSaveLoadDelete(t *testing.T) {
 
 func TestMemorySaveLoadDelete(t *testing.T) { check(t, "memory", NewMemory()) }
 
-func TestLoadMissingIsLocked(t *testing.T) {
+func TestStoredItemIsOnlyTheBase64Key(t *testing.T) {
 	keyring.MockInit()
-	if _, err := New("secrio-test").Load(context.Background(), "nope"); !errors.Is(err, domain.ErrLocked) {
-		t.Fatalf("got %v", err)
+	if err := New("svc").Save(context.Background(), "v", sampleKey()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := keyring.Get("svc", "v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := sampleKey()
+	if got != base64.StdEncoding.EncodeToString(k[:]) {
+		t.Fatal("stored item is not exactly the base64 session key")
 	}
 }
 
 func TestLoadCorruptPayload(t *testing.T) {
 	keyring.MockInit()
-	for _, payload := range []string{
-		"SECRETJUNK",
-		`{"key":"AAAA","expires_at":"2026-01-01T00:00:00Z","last_used":"2026-01-01T00:00:00Z","idle":1}`,
-	} {
+	short := base64.StdEncoding.EncodeToString([]byte("SHORTKEYBYTES"))
+	for _, payload := range []string{"SECRETJUNK!!", short, ""} {
 		if err := keyring.Set("svc", "v", payload); err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +93,7 @@ func TestLoadCorruptPayload(t *testing.T) {
 		if !errors.Is(err, domain.ErrCorrupt) {
 			t.Fatalf("want ErrCorrupt, got %v", err)
 		}
-		if strings.Contains(err.Error(), "SECRETJUNK") || strings.Contains(err.Error(), "AAAA") {
+		if strings.Contains(err.Error(), "SECRETJUNK") || (strings.Contains(err.Error(), short)) {
 			t.Fatalf("leak: %v", err)
 		}
 	}

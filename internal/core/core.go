@@ -25,10 +25,16 @@ var (
 )
 
 type config struct {
-	params   domain.KDFParams
-	sessions app.SessionStore
-	clock    app.Clock
+	params domain.KDFParams
+	keys   app.SessionKeys
+	clock  app.Clock
 }
+
+// The keychain stores satisfy the session key port.
+var (
+	_ app.SessionKeys = (*keychain.KeyStore)(nil)
+	_ app.SessionKeys = (*keychain.MemoryKeyStore)(nil)
+)
 
 // Option overrides a default of New.
 type Option func(*config)
@@ -36,8 +42,8 @@ type Option func(*config)
 // WithKDFParams sets the Argon2id cost for newly created vaults.
 func WithKDFParams(p domain.KDFParams) Option { return func(c *config) { c.params = p } }
 
-// WithSessionStore replaces the OS keychain session store.
-func WithSessionStore(s app.SessionStore) Option { return func(c *config) { c.sessions = s } }
+// WithSessionKeys replaces the OS keychain session key store.
+func WithSessionKeys(k app.SessionKeys) Option { return func(c *config) { c.keys = k } }
 
 // WithClock replaces the system clock.
 func WithClock(cl app.Clock) Option { return func(c *config) { c.clock = cl } }
@@ -48,12 +54,12 @@ func New(dataDir string, opts ...Option) (*app.Service, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
-	cfg := config{params: crypto.DefaultKDFParams(), sessions: keychain.New("secrio"), clock: clock.System{}}
+	cfg := config{params: crypto.DefaultKDFParams(), keys: keychain.New("secrio"), clock: clock.System{}}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	return app.NewService(crypto.Suite{}, crypto.Suite{}, cfg.params,
-		sqlite.Opener{}, registry.New(dataDir), cfg.sessions, cfg.clock), nil
+		sqlite.Opener{}, registry.New(dataDir), cfg.keys, cfg.clock), nil
 }
 
 // DefaultDataDir is <user config dir>/secrio.

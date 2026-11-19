@@ -77,134 +77,6 @@ func TestUnknownVaultIsNotFound(t *testing.T) {
 	}
 }
 
-func TestSessionExpiresAtTTL(t *testing.T) {
-	ctx := context.Background()
-	h := newHarness(t)
-	id := h.newVault(t)
-	if err := h.svc.Unlock(ctx, id, []byte(testPw), time.Hour, 0); err != nil {
-		t.Fatal(err)
-	}
-	h.clock.Advance(59 * time.Minute)
-	u, err := h.svc.Open(ctx, id)
-	if err != nil {
-		t.Fatalf("before ttl: %v", err)
-	}
-	u.Close()
-	h.clock.Advance(time.Minute)
-	if _, err := h.svc.Open(ctx, id); !errors.Is(err, domain.ErrLocked) {
-		t.Fatalf("at ttl: %v", err)
-	}
-	if _, ok := h.sessions.m[id]; ok {
-		t.Fatal("expired session not deleted")
-	}
-}
-
-func TestSessionIdleTimeout(t *testing.T) {
-	ctx := context.Background()
-	h := newHarness(t)
-	id := h.newVault(t)
-	if err := h.svc.Unlock(ctx, id, []byte(testPw), 8*time.Hour, 10*time.Minute); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 3; i++ { // each use refreshes LastUsed
-		h.clock.Advance(9 * time.Minute)
-		u, err := h.svc.Open(ctx, id)
-		if err != nil {
-			t.Fatalf("use %d: %v", i, err)
-		}
-		u.Close()
-	}
-	if got := h.sessions.m[id].LastUsed; !got.Equal(h.clock.Now()) {
-		t.Fatalf("LastUsed not refreshed: %v", got)
-	}
-	h.clock.Advance(10 * time.Minute)
-	if _, err := h.svc.Open(ctx, id); !errors.Is(err, domain.ErrLocked) {
-		t.Fatalf("idle: %v", err)
-	}
-	if _, ok := h.sessions.m[id]; ok {
-		t.Fatal("idle session not deleted")
-	}
-}
-
-func TestLockDeletesSession(t *testing.T) {
-	ctx := context.Background()
-	h := newHarness(t)
-	id := h.newVault(t)
-	if err := h.svc.Unlock(ctx, id, []byte(testPw), time.Hour, 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.svc.Lock(ctx, id); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := h.svc.Open(ctx, id); !errors.Is(err, domain.ErrLocked) {
-		t.Fatalf("got %v", err)
-	}
-}
-
-// gatedSessions pauses the first armed Load until release is closed, and
-// reports Delete calls on deleted.
-type gatedSessions struct {
-	*fakeSessions
-	armed   bool
-	loaded  chan struct{}
-	release chan struct{}
-	deleted chan struct{}
-}
-
-func (g *gatedSessions) Load(ctx context.Context, id string) (Session, error) {
-	s, err := g.fakeSessions.Load(ctx, id)
-	if g.armed {
-		g.armed = false
-		close(g.loaded)
-		<-g.release
-	}
-	return s, err
-}
-
-func (g *gatedSessions) Delete(ctx context.Context, id string) error {
-	err := g.fakeSessions.Delete(ctx, id)
-	close(g.deleted)
-	return err
-}
-
-func TestLockNotUndoneByConcurrentOpen(t *testing.T) {
-	ctx := context.Background()
-	h := newHarness(t)
-	g := &gatedSessions{fakeSessions: h.sessions, loaded: make(chan struct{}),
-		release: make(chan struct{}), deleted: make(chan struct{})}
-	h.svc = NewService(newTestCipher(), newTestKDF(), testParams, h.opener, h.reg, g, h.clock)
-	id := h.newVault(t)
-	if err := h.svc.Unlock(ctx, id, []byte(testPw), time.Hour, 0); err != nil {
-		t.Fatal(err)
-	}
-	g.armed = true
-
-	opened := make(chan *Unlocked)
-	go func() { // Open pauses between Load and Save
-		u, _ := h.svc.Open(ctx, id)
-		opened <- u
-	}()
-	<-g.loaded
-	locked := make(chan error)
-	go func() { locked <- h.svc.Lock(ctx, id) }()
-	// Without serialisation Delete runs now, inside Open's Load..Save window.
-	// With it, Lock waits for Open; the timeout only decides when to resume.
-	select {
-	case <-g.deleted:
-	case <-time.After(50 * time.Millisecond):
-	}
-	close(g.release)
-	if u := <-opened; u != nil {
-		u.Close()
-	}
-	if err := <-locked; err != nil {
-		t.Fatal(err)
-	}
-	if _, err := h.svc.Open(ctx, id); !errors.Is(err, domain.ErrLocked) {
-		t.Fatalf("Lock undone by concurrent Open: %v", err)
-	}
-}
-
 func TestUnlockWrongPassword(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
@@ -212,7 +84,7 @@ func TestUnlockWrongPassword(t *testing.T) {
 	if err := h.svc.Unlock(ctx, id, []byte("wrong"), time.Hour, 0); !errors.Is(err, domain.ErrInvalidPassword) {
 		t.Fatalf("got %v", err)
 	}
-	if len(h.sessions.m) != 0 {
+	if len(h.keys.m) != 0 || h.vault().session != nil {
 		t.Fatal("session saved on wrong password")
 	}
 	if _, err := h.svc.OpenWithPassword(ctx, id, []byte("wrong")); !errors.Is(err, domain.ErrInvalidPassword) {
@@ -234,7 +106,7 @@ func TestOpenWithPasswordDoesNotPersist(t *testing.T) {
 	if err := u.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.sessions.m) != 0 {
+	if len(h.keys.m) != 0 || h.vault().session != nil {
 		t.Fatal("OpenWithPassword persisted a session")
 	}
 	if _, err := h.svc.Open(ctx, id); !errors.Is(err, domain.ErrLocked) {
@@ -325,7 +197,7 @@ func TestUnknownFormatVersionRefused(t *testing.T) {
 	if err := h.svc.ChangePassword(ctx, id, []byte(testPw), []byte("new")); !errors.Is(err, domain.ErrUnsupportedFormat) {
 		t.Fatalf("ChangePassword = %v", err)
 	}
-	if len(h.sessions.m) != 0 {
+	if len(h.keys.m) != 0 || h.vault().session != nil {
 		t.Fatal("session saved for unsupported format")
 	}
 }

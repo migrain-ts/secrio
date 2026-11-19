@@ -87,9 +87,9 @@ func TestSessionSharedBetweenTwoServices(t *testing.T) {
 func TestConcurrentServicesRace(t *testing.T) {
 	ctx := context.Background()
 	// The go-keyring mock is not goroutine-safe, so share a memory store.
-	sessions := keychain.NewMemory()
-	e := newEnv(t, core.WithSessionStore(sessions))
-	svcB, err := core.New(e.dir, core.WithKDFParams(cheapKDF), core.WithSessionStore(sessions))
+	keys := keychain.NewMemory()
+	e := newEnv(t, core.WithSessionKeys(keys))
+	svcB, err := core.New(e.dir, core.WithKDFParams(cheapKDF), core.WithSessionKeys(keys))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,9 @@ func TestWrongPasswordAndCorruptedFile(t *testing.T) {
 	if !errors.Is(err, domain.ErrCorrupt) || strings.Contains(err.Error(), marker) {
 		t.Fatalf("OpenWithPassword garbage: %v", err)
 	}
-	if _, err := e.svc.Open(ctx, "garbage-id"); !errors.Is(err, domain.ErrLocked) {
+	// Open reads the vault file before the keychain: the file defect wins.
+	_, err = e.svc.Open(ctx, "garbage-id")
+	if !errors.Is(err, domain.ErrCorrupt) || strings.Contains(err.Error(), marker) {
 		t.Fatalf("Open garbage without session: %v", err)
 	}
 }

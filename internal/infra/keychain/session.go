@@ -1,65 +1,53 @@
-// Package keychain stores unlocked-vault sessions in the OS keychain.
+// Package keychain stores per-session keys in the OS keychain. It never
+// stores a vault key: that lives sealed under the session key in the vault
+// file.
 package keychain
 
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/zalando/go-keyring"
 
-	"secrio/internal/app"
 	"secrio/internal/domain"
 )
 
-// SessionStore keeps one keychain item per vault: service=service, user=vaultID.
-type SessionStore struct{ service string }
+// KeyStore keeps one keychain item per vault: service=service, user=vaultID,
+// holding the 32-byte session key in base64. It implements app.SessionKeys.
+type KeyStore struct{ service string }
 
-func New(service string) *SessionStore { return &SessionStore{service: service} }
+func New(service string) *KeyStore { return &KeyStore{service: service} }
 
-// wire is the stored payload; the key is base64 (domain.Key would marshal as a number array).
-type wire struct {
-	Key       string `json:"key"`
-	ExpiresAt string `json:"expires_at"`
-	LastUsed  string `json:"last_used"`
-	Idle      int64  `json:"idle"`
-}
-
-func (s *SessionStore) Save(_ context.Context, vaultID string, sess app.Session) error {
-	raw := sess.VaultKey[:]
-	w := wire{
-		Key:       base64.StdEncoding.EncodeToString(raw),
-		ExpiresAt: sess.ExpiresAt.UTC().Format(time.RFC3339Nano),
-		LastUsed:  sess.LastUsed.UTC().Format(time.RFC3339Nano),
-		Idle:      int64(sess.Idle),
-	}
-	data, err := json.Marshal(w)
-	if err != nil {
-		return fmt.Errorf("encode session: %w", err)
-	}
-	defer zero(data)
-	if err := keyring.Set(s.service, vaultID, string(data)); err != nil {
+// Save stores k. The intermediate buffer is zeroed; the string handed to the
+// keyring API cannot be.
+func (s *KeyStore) Save(_ context.Context, vaultID string, k domain.Key) error {
+	buf := make([]byte, base64.StdEncoding.EncodedLen(len(k)))
+	defer clear(buf)
+	base64.StdEncoding.Encode(buf, k[:])
+	if err := keyring.Set(s.service, vaultID, string(buf)); err != nil {
 		return fmt.Errorf("keychain save: %w", err)
 	}
 	return nil
 }
 
-func (s *SessionStore) Load(_ context.Context, vaultID string) (app.Session, error) {
+// Load returns domain.ErrLocked on a miss and domain.ErrCorrupt when the item
+// is not a base64 32-byte key.
+func (s *KeyStore) Load(_ context.Context, vaultID string) (domain.Key, error) {
 	payload, err := keyring.Get(s.service, vaultID)
 	if errors.Is(err, keyring.ErrNotFound) {
-		return app.Session{}, domain.ErrLocked
+		return domain.Key{}, domain.ErrLocked
 	}
 	if err != nil {
-		return app.Session{}, fmt.Errorf("keychain load: %w", err)
+		return domain.Key{}, fmt.Errorf("keychain load: %w", err)
 	}
 	return decode(payload)
 }
 
-func (s *SessionStore) Delete(_ context.Context, vaultID string) error {
+// Delete is idempotent: a missing item is not an error.
+func (s *KeyStore) Delete(_ context.Context, vaultID string) error {
 	err := keyring.Delete(s.service, vaultID)
 	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return fmt.Errorf("keychain delete: %w", err)
@@ -67,63 +55,45 @@ func (s *SessionStore) Delete(_ context.Context, vaultID string) error {
 	return nil
 }
 
-func decode(payload string) (app.Session, error) {
-	corrupt := fmt.Errorf("session payload undecodable: %w", domain.ErrCorrupt)
-	var w wire
-	if err := json.Unmarshal([]byte(payload), &w); err != nil {
-		return app.Session{}, corrupt
+// decode parses a base64 session key. Errors never include the payload.
+func decode(payload string) (domain.Key, error) {
+	raw, err := base64.StdEncoding.DecodeString(payload)
+	defer clear(raw)
+	var k domain.Key
+	if err != nil || len(raw) != len(k) {
+		return domain.Key{}, fmt.Errorf("session key undecodable: %w", domain.ErrCorrupt)
 	}
-	raw, err := base64.StdEncoding.DecodeString(w.Key)
-	if err != nil {
-		return app.Session{}, corrupt
-	}
-	defer zero(raw)
-	var key domain.Key
-	if len(raw) != len(key) {
-		return app.Session{}, corrupt
-	}
-	copy(key[:], raw)
-	exp, err1 := time.Parse(time.RFC3339Nano, w.ExpiresAt)
-	last, err2 := time.Parse(time.RFC3339Nano, w.LastUsed)
-	if err1 != nil || err2 != nil {
-		return app.Session{}, corrupt
-	}
-	return app.Session{VaultKey: key, ExpiresAt: exp.UTC(), LastUsed: last.UTC(), Idle: time.Duration(w.Idle)}, nil
+	copy(k[:], raw)
+	return k, nil
 }
 
-func zero(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
-}
-
-// MemorySessionStore is an in-process app.SessionStore. It is meant for tests
-// and as a non-persistent fallback when no OS keychain is available.
-type MemorySessionStore struct {
+// MemoryKeyStore is an in-process app.SessionKeys. It is meant for tests and
+// as a non-persistent fallback when no OS keychain is available.
+type MemoryKeyStore struct {
 	mu sync.Mutex
-	m  map[string]app.Session
+	m  map[string]domain.Key
 }
 
-func NewMemory() *MemorySessionStore { return &MemorySessionStore{m: map[string]app.Session{}} }
+func NewMemory() *MemoryKeyStore { return &MemoryKeyStore{m: map[string]domain.Key{}} }
 
-func (s *MemorySessionStore) Save(_ context.Context, vaultID string, sess app.Session) error {
+func (s *MemoryKeyStore) Save(_ context.Context, vaultID string, k domain.Key) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.m[vaultID] = sess
+	s.m[vaultID] = k
 	return nil
 }
 
-func (s *MemorySessionStore) Load(_ context.Context, vaultID string) (app.Session, error) {
+func (s *MemoryKeyStore) Load(_ context.Context, vaultID string) (domain.Key, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	sess, ok := s.m[vaultID]
+	k, ok := s.m[vaultID]
 	if !ok {
-		return app.Session{}, domain.ErrLocked
+		return domain.Key{}, domain.ErrLocked
 	}
-	return sess, nil
+	return k, nil
 }
 
-func (s *MemorySessionStore) Delete(_ context.Context, vaultID string) error {
+func (s *MemoryKeyStore) Delete(_ context.Context, vaultID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.m, vaultID)

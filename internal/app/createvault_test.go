@@ -33,7 +33,7 @@ func (*failingRegistry) Add(context.Context, VaultEntry) error { return errors.N
 func TestCreateVaultCleansUpWhenRegistryFails(t *testing.T) {
 	h := newHarness(t)
 	reg := &failingRegistry{}
-	svc := NewService(newTestCipher(), newTestKDF(), testParams, diskOpener{h.opener}, reg, h.sessions, h.clock)
+	svc := NewService(newTestCipher(), newTestKDF(), testParams, diskOpener{h.opener}, reg, h.keys, h.clock)
 	path := filepath.Join(t.TempDir(), "v.db")
 	_, err := svc.CreateVault(context.Background(), "n", path, []byte(testPw))
 	if err == nil || err.Error() != "registry down" {

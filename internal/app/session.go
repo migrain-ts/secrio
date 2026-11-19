@@ -48,33 +48,56 @@ func (u *Unlocked) Close() error {
 }
 
 // Open returns a handle from the persisted session. A missing, expired
-// (TTL) or idle session yields domain.ErrLocked; an expired one is deleted.
-// Success refreshes the session's LastUsed.
+// (TTL), idle or damaged session yields domain.ErrLocked and whatever is left
+// of it (row or key) is deleted. Success refreshes the session's LastUsed.
 //
-// Load..Save is serialised with Lock and Unlock in this process only. A Lock
-// issued by another process during that brief window can be undone, leaving
-// the session valid until its TTL or idle expiry.
-func (s *Service) Open(ctx context.Context, vaultID string) (*Unlocked, error) {
-	s.sessionMu.Lock()
-	defer s.sessionMu.Unlock()
-	sess, err := s.sessions.Load(ctx, vaultID)
-	if err != nil {
-		return nil, err
-	}
-	defer zeroKey(&sess.VaultKey)
-	now := s.clock.Now()
-	if !now.Before(sess.ExpiresAt) || (sess.Idle > 0 && now.Sub(sess.LastUsed) >= sess.Idle) {
-		return nil, errors.Join(domain.ErrLocked, s.sessions.Delete(ctx, vaultID))
-	}
+// The refresh is one atomic conditional update in the vault file, so a Lock
+// from any process that deleted the row first is never undone: Open then
+// fails with domain.ErrLocked. A handle already returned does not observe a
+// later Lock.
+func (s *Service) Open(ctx context.Context, vaultID string) (_ *Unlocked, err error) {
 	st, _, err := s.openStore(ctx, vaultID)
 	if err != nil {
 		return nil, err
 	}
-	sess.LastUsed = now
-	if err := s.sessions.Save(ctx, vaultID, sess); err != nil {
-		return nil, errors.Join(err, st.Close())
+	keep := false
+	defer func() {
+		if !keep {
+			closeInto(&err, st)
+		}
+	}()
+	sk, err := s.keys.Load(ctx, vaultID)
+	if errors.Is(err, domain.ErrLocked) {
+		// No key: any row left is useless, delete it.
+		return nil, errors.Join(domain.ErrLocked, st.DeleteSession(ctx))
 	}
-	return &Unlocked{c: s.c, kdf: s.kdf, clock: s.clock, store: st, key: sess.VaultKey}, nil
+	if err != nil {
+		return nil, err // keychain trouble: keep the row
+	}
+	defer zeroKey(&sk)
+	ok, err := st.TouchSession(ctx, s.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+	if !ok { // no row, expired or idle
+		return nil, errors.Join(domain.ErrLocked, s.killSession(ctx, st, vaultID))
+	}
+	row, err := st.GetSession(ctx)
+	if err != nil {
+		return nil, err // ErrLocked when a Lock deleted the row after Touch
+	}
+	pt, err := s.c.Open(sk, row.Blob, sessionAAD(vaultID))
+	if err != nil { // tampered, truncated or from another vault
+		return nil, errors.Join(domain.ErrLocked, s.killSession(ctx, st, vaultID))
+	}
+	vk, err := keyFromBytes(pt) // zeroes pt
+	if err != nil {
+		return nil, errors.Join(domain.ErrLocked, s.killSession(ctx, st, vaultID))
+	}
+	u := &Unlocked{c: s.c, kdf: s.kdf, clock: s.clock, store: st, key: vk}
+	zeroKey(&vk)
+	keep = true
+	return u, nil
 }
 
 // OpenWithPassword returns a handle without persisting any session.
