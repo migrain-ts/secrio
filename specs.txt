@@ -1,0 +1,860 @@
+# Envault
+## Cahier des charges fonctionnel et technique
+
+**Version :** 1.0  
+**Type :** Application desktop multiplateforme + CLI  
+**Statut :** Spécification initiale  
+**Langage principal :** Go  
+**Licence envisagée :** Open Source (MIT ou Apache 2.0)
+
+---
+
+# 1. Présentation du projet
+
+## 1.1. Concept
+
+Envault est un gestionnaire de secrets destiné aux développeurs et aux équipes techniques.
+
+Il permet de centraliser, sécuriser, organiser et utiliser les secrets associés aux différents projets logiciels.
+
+Les secrets peuvent être :
+- Variables d'environnement.
+- Clés API.
+- Tokens GitHub et GitLab.
+- Credentials de bases de données.
+- Identifiants de services externes.
+- Credentials Docker.
+- Clés privées.
+- Certificats.
+- Autres informations sensibles.
+
+Envault repose sur une approche local-first : les données sont stockées localement et chiffrées. La synchronisation distante est une fonctionnalité optionnelle, qui pourra être ajoutée ultérieurement.
+
+Le produit est composé de deux interfaces complémentaires :
+1. Envault Desktop : application graphique.
+2. Envault CLI : interface en ligne de commande.
+
+Les deux interfaces utilisent le même moteur Go et le même format de coffre.
+
+## 1.2. Objectifs
+
+- Centraliser les secrets de plusieurs projets.
+- Éviter la multiplication des fichiers `.env`.
+- Éviter le stockage accidentel de secrets dans Git.
+- Faciliter le passage entre les environnements development, staging et production.
+- Permettre l'injection sécurisée des variables dans les processus.
+- Simplifier le partage et la synchronisation future des secrets.
+- Proposer une expérience développeur simple et rapide.
+- Fonctionner sur Windows, macOS et Linux.
+
+## 1.3. Positionnement
+
+Envault se positionne comme un gestionnaire de secrets open source, local-first et orienté développeurs.
+
+Principes fondamentaux :
+- Local-first.
+- Chiffrement de bout en bout.
+- Aucun compte obligatoire pour utiliser l'application.
+- Aucun service cloud obligatoire.
+- CLI-first et Desktop-friendly.
+- Stockage portable.
+- Compatibilité multiplateforme.
+- Pas de dépendance à un fournisseur cloud.
+
+---
+
+# 2. Architecture générale
+
+## 2.1. Composants
+
+Le projet est organisé autour de quatre composants principaux.
+
+### Envault Core
+
+Bibliothèque Go contenant toute la logique métier.
+
+Responsabilités :
+- Gestion des coffres.
+- Gestion des secrets.
+- Chiffrement et déchiffrement.
+- Gestion des environnements.
+- Gestion des permissions locales.
+- Stockage.
+- Import et export.
+- Historique et versions.
+- Validation des données.
+
+Le Core ne doit dépendre ni de l'interface graphique ni de la CLI.
+
+### Envault Desktop
+
+Application graphique multiplateforme.
+
+Technologies envisagées :
+- Wails.
+- Go.
+- React.
+- TypeScript.
+- Vite.
+- Tailwind CSS.
+- shadcn/ui.
+- Zustand.
+
+L'application communique avec le Core via les bindings Wails.
+
+### Envault CLI
+
+Interface terminal destinée aux développeurs.
+
+Technologies :
+- Go.
+- Cobra.
+- Slog.
+- Lipgloss pour le rendu terminal, si nécessaire.
+
+La CLI utilise directement Envault Core.
+
+### Envault Sync (future version)
+
+Service optionnel permettant de synchroniser les coffres entre plusieurs appareils.
+
+Il sera développé séparément et ne sera pas nécessaire au fonctionnement de la première version.
+
+## 2.2. Architecture logique
+
+Desktop et CLI doivent partager les mêmes règles métier, le même modèle de données et les mêmes mécanismes cryptographiques.
+
+Aucune logique de chiffrement ne doit être implémentée indépendamment dans les interfaces.
+
+---
+
+# 3. Gestion des coffres
+
+## 3.1. Création d'un coffre
+
+L'utilisateur doit pouvoir créer plusieurs coffres indépendants.
+
+Exemples :
+- Personal
+- Work
+- HôtenB
+- Side Projects
+- Infrastructure
+
+Chaque coffre possède :
+- Un identifiant unique.
+- Un nom.
+- Une date de création.
+- Une date de dernière modification.
+- Une configuration cryptographique.
+- Une clé de chiffrement dédiée.
+- Un ensemble de projets et d'environnements.
+
+## 3.2. Protection du coffre
+
+Chaque coffre est protégé par un mot de passe principal.
+
+Lors de sa création :
+1. L'utilisateur choisit un mot de passe.
+2. Une clé de dérivation est générée.
+3. Une clé maître est créée.
+4. Une clé de chiffrement du coffre est générée aléatoirement.
+5. La clé du coffre est protégée par la clé dérivée du mot de passe.
+
+Le système doit utiliser :
+- Argon2id pour la dérivation de clé.
+- XChaCha20-Poly1305 pour le chiffrement authentifié.
+- Des clés cryptographiques générées avec `crypto/rand`.
+
+Le mot de passe principal ne doit jamais être stocké en clair.
+
+Le système doit permettre de modifier le mot de passe sans rechiffrer individuellement tous les secrets.
+
+## 3.3. Verrouillage automatique
+
+Fonctionnalités :
+- Verrouillage manuel.
+- Verrouillage après une période d'inactivité configurable.
+- Verrouillage lors de la fermeture de l'application.
+- Verrouillage après mise en veille, lorsque cela est détectable.
+- Demande de déverrouillage lors d'un nouvel accès.
+
+La durée par défaut doit être configurable.
+
+---
+
+# 4. Organisation des secrets
+
+## 4.1. Structure
+
+Les secrets sont organisés selon la hiérarchie suivante :
+
+Coffre → Projet → Environnement → Secret
+
+Exemple :
+
+Work
+- HôtenB
+  - Development
+    - DATABASE_URL
+    - JWT_SECRET
+    - API_KEY
+  - Staging
+    - DATABASE_URL
+    - JWT_SECRET
+  - Production
+    - DATABASE_URL
+    - JWT_SECRET
+- Portfolio
+  - Development
+  - Production
+
+## 4.2. Projets
+
+Un projet contient :
+- Un nom.
+- Une description facultative.
+- Un identifiant unique.
+- Une date de création.
+- Une liste d'environnements.
+- Des métadonnées facultatives.
+
+L'utilisateur peut créer, renommer, supprimer et dupliquer un projet.
+
+## 4.3. Environnements
+
+Chaque projet peut posséder plusieurs environnements.
+
+Environnements prédéfinis :
+- Development.
+- Testing.
+- Staging.
+- Production.
+
+L'utilisateur peut également créer ses propres environnements.
+
+## 4.4. Secrets
+
+Chaque secret contient :
+- Une clé.
+- Une valeur.
+- Une description facultative.
+- Un type.
+- Une date de création.
+- Une date de modification.
+- Des métadonnées facultatives.
+
+Types envisagés :
+- Text.
+- Password.
+- API Key.
+- Token.
+- URL.
+- Private Key.
+- Certificate.
+- JSON.
+- File (fonctionnalité ultérieure).
+
+Les noms de secrets doivent respecter les conventions des variables d'environnement.
+
+Les valeurs doivent être chiffrées au repos.
+
+---
+
+# 5. Fonctionnalités Envault Desktop
+
+## 5.1. Interface générale
+
+L'application doit proposer une interface moderne, sobre et orientée développeurs.
+
+Navigation principale :
+- Dashboard.
+- Vaults.
+- Projects.
+- Secrets.
+- History.
+- Settings.
+
+L'interface doit être disponible en anglais dans la première version. Une internationalisation doit être prévue.
+
+## 5.2. Dashboard
+
+Le dashboard affiche :
+- Nombre de coffres.
+- Nombre de projets.
+- Nombre de secrets.
+- Dernières modifications.
+- Coffres récemment utilisés.
+- État du verrouillage.
+- Alertes éventuelles.
+
+Aucune valeur sensible ne doit apparaître directement dans le dashboard.
+
+## 5.3. Gestion des secrets
+
+L'utilisateur doit pouvoir :
+- Créer un secret.
+- Modifier un secret.
+- Supprimer un secret.
+- Copier sa valeur.
+- Afficher temporairement sa valeur.
+- Masquer sa valeur.
+- Rechercher un secret.
+- Filtrer par projet et environnement.
+- Ajouter une description.
+
+L'affichage des valeurs doit être masqué par défaut.
+
+## 5.4. Gestion des environnements
+
+L'utilisateur peut comparer les environnements d'un projet.
+
+Exemple :
+
+| Variable | Development | Staging | Production |
+|---|---|---|---|
+| DATABASE_URL | Présent | Présent | Présent |
+| STRIPE_KEY | Présent | Présent | Présent |
+| REDIS_URL | Présent | Absent | Présent |
+
+La comparaison ne doit jamais exposer les valeurs.
+
+L'utilisateur doit pouvoir identifier les variables manquantes et les différences entre environnements.
+
+## 5.5. Import et export
+
+Formats supportés :
+- `.env`
+- `.json`
+- `.yaml`
+
+Import :
+- Sélection d'un fichier.
+- Analyse des variables.
+- Prévisualisation.
+- Détection des doublons.
+- Choix de la stratégie de remplacement.
+- Validation avant import.
+
+Export :
+- Export d'un environnement.
+- Export d'un projet.
+- Export au format `.env`, JSON ou YAML.
+- Possibilité de choisir les secrets à exporter.
+
+Les exports non chiffrés doivent faire l'objet d'un avertissement explicite.
+
+## 5.6. Historique
+
+Chaque modification importante doit être historisée.
+
+Informations :
+- Secret concerné.
+- Type d'opération.
+- Date.
+- Ancienne version.
+- Nouvelle version.
+
+L'historique ne doit jamais contenir de valeurs en clair.
+
+Les versions précédentes doivent être restaurables après authentification.
+
+## 5.7. Paramètres
+
+Paramètres disponibles :
+- Langue.
+- Thème clair / sombre / système.
+- Délai de verrouillage automatique.
+- Préférences de copie.
+- Préférences d'affichage.
+- Emplacement des données.
+- Gestion des sauvegardes.
+- Préférences de notifications.
+
+---
+
+# 6. Fonctionnalités Envault CLI
+
+La CLI doit proposer une interface simple, cohérente et scriptable.
+
+Nom de commande : `envault`.
+
+## 6.1. Initialisation
+
+Créer un coffre :
+
+`envault vault create`
+
+Lister les coffres :
+
+`envault vault list`
+
+Déverrouiller un coffre :
+
+`envault unlock`
+
+Verrouiller un coffre :
+
+`envault lock`
+
+## 6.2. Gestion des projets
+
+Créer un projet :
+
+`envault project create hotenb`
+
+Lister les projets :
+
+`envault project list`
+
+Supprimer un projet :
+
+`envault project delete hotenb`
+
+## 6.3. Gestion des secrets
+
+Ajouter un secret :
+
+`envault set DATABASE_URL`
+
+La valeur doit pouvoir être fournie via une saisie masquée, stdin ou une option dédiée.
+
+Récupérer un secret :
+
+`envault get DATABASE_URL`
+
+Lister les secrets :
+
+`envault list`
+
+Supprimer un secret :
+
+`envault delete DATABASE_URL`
+
+Modifier un secret :
+
+`envault edit DATABASE_URL`
+
+La CLI doit permettre de sélectionner le coffre, le projet et l'environnement.
+
+## 6.4. Injection de variables
+
+Fonctionnalité essentielle.
+
+Exemple :
+
+`envault run --env production -- npm run start`
+
+Fonctionnement :
+1. Envault identifie le coffre.
+2. Déverrouille les secrets nécessaires.
+3. Construit l'environnement du processus enfant.
+4. Lance la commande demandée.
+5. Transmet le code de sortie du processus.
+6. Nettoie autant que possible les données sensibles en mémoire.
+
+Les secrets ne doivent pas être écrits dans un fichier temporaire en clair.
+
+La commande doit préserver les variables d'environnement existantes, sauf lorsqu'elles sont explicitement remplacées.
+
+## 6.5. Import et export
+
+Importer :
+
+`envault import .env --env development`
+
+Exporter :
+
+`envault export --env staging`
+
+L'export doit être explicitement demandé et ne doit jamais être effectué automatiquement.
+
+## 6.6. Intégration Shell
+
+Prévoir des intégrations Bash, Zsh et PowerShell.
+
+Exemples :
+- Autocomplétion.
+- Aide contextuelle.
+- Variables d'environnement.
+- Sélection interactive d'un projet.
+- Sélection interactive d'un environnement.
+
+La CLI doit fonctionner sans interface interactive dans les scripts CI/CD.
+
+---
+
+# 7. Sécurité
+
+La sécurité constitue une exigence fondamentale du projet.
+
+## 7.1. Chiffrement
+
+- Chiffrement authentifié des secrets.
+- Clé de chiffrement propre à chaque coffre.
+- Dérivation de clé avec Argon2id.
+- Nonces uniques pour chaque opération de chiffrement.
+- Versionnement du format cryptographique.
+- Rotation possible des clés.
+- Protection contre la modification des données chiffrées.
+
+## 7.2. Stockage
+
+Les valeurs sensibles doivent être chiffrées avant leur écriture dans SQLite.
+
+Le fichier de base de données ne doit jamais contenir les secrets en clair.
+
+Les sauvegardes doivent conserver le chiffrement.
+
+## 7.3. Mémoire
+
+- Éviter les copies inutiles des secrets.
+- Ne jamais journaliser les valeurs.
+- Ne jamais afficher les valeurs dans les erreurs.
+- Nettoyer les buffers lorsque cela est possible.
+- Limiter la durée de conservation des secrets en mémoire.
+
+Il faut garder à l'esprit que Go ne garantit pas un effacement absolu des données en mémoire en raison du garbage collector et des copies internes.
+
+## 7.4. Clipboard
+
+Lorsqu'un secret est copié :
+- Possibilité d'effacement automatique après un délai.
+- Avertissement sur la persistance possible du presse-papiers.
+- Ne pas écraser silencieusement un contenu copié entre-temps par une autre application.
+
+## 7.5. Journalisation
+
+Les logs ne doivent jamais contenir :
+- Valeurs des secrets.
+- Mots de passe.
+- Clés de chiffrement.
+- Tokens d'authentification.
+
+Les logs doivent uniquement contenir les événements techniques nécessaires au diagnostic.
+
+## 7.6. Authentification locale
+
+Le déverrouillage du coffre est indépendant de l'authentification du système d'exploitation.
+
+Une intégration ultérieure avec le Keychain macOS, Windows Credential Manager et les gestionnaires de secrets Linux pourra permettre de protéger les clés de déverrouillage.
+
+---
+
+# 8. Synchronisation (version ultérieure)
+
+La synchronisation ne doit pas être obligatoire.
+
+Elle doit permettre :
+- Synchronisation entre ordinateurs.
+- Synchronisation entre Windows, Linux et macOS.
+- Gestion des conflits.
+- Versionnement.
+- Sauvegarde distante.
+- Partage de coffres.
+
+Le serveur de synchronisation ne doit jamais avoir accès aux secrets déchiffrés ni aux clés permettant de les déchiffrer.
+
+Un protocole de synchronisation versionné devra être défini.
+
+La synchronisation et le partage devront faire l'objet d'une conception cryptographique distincte avant leur implémentation.
+
+---
+
+# 9. Intégrations futures
+
+## 9.1. GitHub
+
+- Gestion des tokens GitHub.
+- Import des secrets depuis GitHub.
+- Export vers GitHub Actions Secrets.
+- Gestion des secrets par repository.
+- Intégration avec GitHub CLI.
+- Workflow GitHub Actions pour utiliser Envault.
+
+Les secrets GitHub Actions ne sont pas accessibles en clair après leur enregistrement via l'API standard. L'intégration devra tenir compte de cette limitation.
+
+## 9.2. GitLab
+
+- Gestion des tokens.
+- Intégration des variables CI/CD.
+- Synchronisation des variables de projets et groupes.
+
+## 9.3. Docker
+
+- Gestion des credentials Docker.
+- Injection dans les commandes Docker.
+- Intégration Docker Compose.
+
+## 9.4. CI/CD
+
+- GitHub Actions.
+- GitLab CI.
+- Jenkins.
+- Autres pipelines via la CLI.
+
+---
+
+# 10. Architecture technique détaillée
+
+## 10.1. Stack
+
+| Composant | Technologie |
+|---|---|
+| Langage principal | Go |
+| Desktop | Wails |
+| Frontend | React + TypeScript |
+| Build frontend | Vite |
+| UI | Tailwind CSS + shadcn/ui |
+| State | Zustand |
+| CLI | Cobra |
+| Base de données | SQLite |
+| Accès SQL | sqlc ou couche SQL dédiée |
+| Chiffrement | XChaCha20-Poly1305 |
+| KDF | Argon2id |
+| Validation | Validation explicite en Go |
+| Tests | Go testing + Vitest |
+| CI/CD | GitHub Actions |
+
+## 10.2. Structure du repository
+
+```text
+envault/
+├── cmd/
+│   ├── envault/
+│   │   └── main.go
+│   └── desktop/
+│       └── main.go
+│
+├── internal/
+│   ├── vault/
+│   ├── crypto/
+│   ├── secret/
+│   ├── project/
+│   ├── environment/
+│   ├── storage/
+│   ├── history/
+│   ├── importexport/
+│   └── platform/
+│
+├── pkg/
+│   └── sdk/
+│
+├── cli/
+│   ├── commands/
+│   └── output/
+│
+├── desktop/
+│   ├── frontend/
+│   └── bindings/
+│
+├── migrations/
+├── docs/
+├── scripts/
+├── tests/
+├── .github/
+│   └── workflows/
+├── go.mod
+└── README.md
+```
+
+La structure définitive devra respecter les conventions Go et éviter les packages artificiellement abstraits.
+
+## 10.3. Stockage local
+
+SQLite stockera :
+- Les métadonnées des coffres.
+- Les projets.
+- Les environnements.
+- Les secrets chiffrés.
+- Les versions chiffrées.
+- Les métadonnées d'historique.
+
+Les données sensibles devront être chiffrées avant leur insertion en base.
+
+---
+
+# 11. Distribution multiplateforme
+
+Envault doit être distribué sur les trois principaux systèmes.
+
+## Windows
+- Application `.exe`.
+- Installateur `.msi` ou `.exe`.
+- CLI autonome.
+- Signature du binaire à terme.
+
+## macOS
+- Application `.app`.
+- Package `.dmg`.
+- CLI autonome.
+- Support Apple Silicon et Intel.
+- Signature et notarisation à terme.
+
+## Linux
+- Binaire autonome.
+- Package `.deb`.
+- Package `.rpm`.
+- AppImage si possible.
+
+Les builds doivent être automatisés via GitHub Actions.
+
+Chaque release doit contenir :
+- Les binaires desktop.
+- Les binaires CLI.
+- Les checksums SHA-256.
+- Les notes de version.
+- Les instructions d'installation.
+
+---
+
+# 12. Qualité et tests
+
+## 12.1. Tests unitaires
+
+- Chiffrement et déchiffrement.
+- Dérivation de clés.
+- Gestion des coffres.
+- Gestion des secrets.
+- Gestion des environnements.
+- Import et export.
+- Historique.
+- Validation.
+
+## 12.2. Tests d'intégration
+
+- Création d'un coffre.
+- Déverrouillage.
+- Ajout et récupération de secrets.
+- Fermeture et réouverture.
+- Persistance SQLite.
+- Migration de données.
+- Exécution d'un processus avec injection de secrets.
+
+## 12.3. Tests de sécurité
+
+- Mot de passe incorrect.
+- Données chiffrées corrompues.
+- Nonce incorrect.
+- Tentative de modification d'un ciphertext.
+- Vérification de l'absence de secrets en clair dans SQLite.
+- Vérification des logs.
+- Vérification des permissions des fichiers.
+- Tests de concurrence avec `go test -race`.
+
+## 12.4. Tests multiplateformes
+
+Les tests doivent être exécutés sur :
+- Windows.
+- macOS.
+- Ubuntu Linux.
+
+---
+
+# 13. Roadmap de développement
+
+## Phase 1 : Core cryptographique
+
+- Définition du format du coffre.
+- Création des clés.
+- Dérivation Argon2id.
+- Chiffrement et déchiffrement.
+- Stockage SQLite.
+- Tests cryptographiques.
+
+**Livrable :** bibliothèque Go fonctionnelle.
+
+## Phase 2 : CLI MVP
+
+- Création et déverrouillage.
+- Gestion des coffres.
+- Gestion des projets.
+- Gestion des environnements.
+- CRUD des secrets.
+- Import/export `.env`.
+- Injection de variables.
+
+**Livrable :** CLI utilisable quotidiennement.
+
+## Phase 3 : Desktop MVP
+
+- Interface d'accueil.
+- Création de coffres.
+- Déverrouillage.
+- Gestion des projets.
+- Gestion des environnements.
+- Gestion des secrets.
+- Recherche.
+- Import/export.
+
+**Livrable :** application desktop fonctionnelle.
+
+## Phase 4 : Stabilisation
+
+- Historique.
+- Sauvegardes.
+- Gestion des erreurs.
+- Packaging multiplateforme.
+- CI/CD.
+- Documentation.
+- Tests E2E.
+
+**Livrable :** Envault 1.0.
+
+## Phase 5 : Fonctionnalités avancées
+
+- Synchronisation.
+- GitHub.
+- GitLab.
+- Docker.
+- Gestion des clés système.
+- Partage de coffres.
+- Gestion des accès.
+- Rotation des secrets.
+
+**Livrable :** Envault 2.0.
+
+---
+
+# 14. Critères d'acceptation de la version 1.0
+
+Envault 1.0 sera considérée comme terminée lorsque :
+
+- [ ] L'application desktop fonctionne sur Windows, macOS et Linux.
+- [ ] La CLI fonctionne sur les trois systèmes.
+- [ ] Les deux interfaces utilisent le même Core Go.
+- [ ] Plusieurs coffres peuvent être créés.
+- [ ] Les coffres sont protégés par mot de passe.
+- [ ] Les secrets sont chiffrés au repos.
+- [ ] Les projets et environnements sont gérables.
+- [ ] Les secrets peuvent être créés, modifiés et supprimés.
+- [ ] Les fichiers `.env` peuvent être importés.
+- [ ] Les environnements peuvent être exportés.
+- [ ] Les secrets peuvent être injectés dans un processus.
+- [ ] L'historique est disponible.
+- [ ] Les erreurs ne divulguent aucune donnée sensible.
+- [ ] Les migrations SQLite sont fonctionnelles.
+- [ ] Les tests automatisés passent.
+- [ ] Les releases sont automatisées.
+- [ ] La documentation utilisateur et développeur est disponible.
+
+---
+
+# 15. Principes de développement
+
+Le développement d'Envault doit respecter les principes suivants :
+
+1. Le Core Go est la source unique de vérité.
+2. Desktop et CLI ne doivent pas dupliquer la logique métier.
+3. Le chiffrement est obligatoire avant toute persistance de données sensibles.
+4. Aucun secret ne doit être exposé dans les logs.
+5. Le fonctionnement local ne doit dépendre d'aucun service externe.
+6. Les fonctionnalités de synchronisation ne doivent pas compromettre le modèle de sécurité local.
+7. Les fonctionnalités doivent être testables indépendamment de l'interface.
+8. Le produit doit rester léger, rapide et simple à utiliser.
+9. Les formats de données doivent être versionnés.
+10. La sécurité doit être considérée dès la conception, et non ajoutée après coup.
+
+**Vision finale :**
+
+Envault doit devenir un outil quotidien pour les développeurs, permettant de gérer leurs secrets depuis une interface graphique ou un terminal, sans dépendre d'une plateforme SaaS ni sacrifier la sécurité.
