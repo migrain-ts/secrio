@@ -1,13 +1,197 @@
 @import 'tailwindcss';
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/* Self-hosted Inter (variable): the webview is offline under a strict CSP
+   (font-src 'self' data:), so the kit's Google Fonts @import is replaced. */
+@import "@fontsource-variable/inter";
 
-/* Placeholder dark base; the Linear theme replaces this in Task 9. */
+@custom-variant dark (&:is(.dark *));
+
+/* Better Design "linear" tokens. The app is dark only (<html class="dark">);
+   :root and .dark carry the same values. --background is oklch(0.139 0.003
+   246.3) = rgb(8 9 10), mirrored in index.html and BackgroundColour in
+   cmd/secrio-desktop/main.go to avoid a flash on start. */
 :root {
   color-scheme: dark;
-  background-color: #08090a;
-  color: #f7f8f8;
+  --background: oklch(0.139 0.003 246.3);
+  --foreground: oklch(0.978 0.001 197.1);
+  --card: oklch(0.166 0.006 270);
+  --card-foreground: oklch(0.9838 0.0035 247.86);
+  --popover: oklch(0.166 0.006 270);
+  --popover-foreground: oklch(0.978 0.001 197.1);
+  --primary: oklch(0.567 0.159 275.2);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.205 0.008 270);
+  --secondary-foreground: oklch(0.6275 0.0255 283.24);
+  --muted: oklch(0.166 0.006 270);
+  --muted-foreground: oklch(0.701 0.0199 275.78);
+  --accent: oklch(0.237 0.008 270);
+  --accent-foreground: oklch(0.9838 0.0035 247.86);
+  --destructive: oklch(0.3959 0.1331 25.72);
+  --border: oklch(0.27 0.01 270);
+  --input: oklch(0.205 0.008 270);
+  --ring: oklch(0.567 0.159 275.2);
+  --chart-1: var(--primary);
+  --chart-2: oklch(from var(--primary) calc(l - 0.09) calc(c * 0.92) h);
+  --chart-3: oklch(from var(--primary) calc(l - 0.18) calc(c * 0.84) h);
+  --chart-4: oklch(from var(--primary) calc(l - 0.27) calc(c * 0.76) h);
+  --chart-5: oklch(from var(--primary) calc(l - 0.36) calc(c * 0.68) h);
+  --radius: 0.5rem;
+  /* The linear kit ships no sidebar tokens; map shadcn's to linear ones. */
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --destructive-foreground: oklch(0.9838 0.0035 247.86);
+  --transition-duration-fast: 120ms;
+  --transition-duration-base: 160ms;
+  --transition-duration-slow: 220ms;
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-in-out: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+  --ease-in: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+  --default-transition-duration: var(--transition-duration-fast);
+  --default-transition-timing-function: var(--ease-out);
+  --ai-label: var(--muted);
+  --ai-label-foreground: var(--foreground);
+  --layout-density: compact;
+  --layout-density-source: design-system;
+  --layout-sidebar: calc(var(--spacing, 0.25rem) * 46);
+  --layout-inset: calc(var(--spacing, 0.25rem) * 4);
+  --layout-section-gap: calc(var(--spacing, 0.25rem) * 6);
+  --layout-column-gap: calc(var(--spacing, 0.25rem) * 3);
+  --layout-card-padding: calc(var(--spacing, 0.25rem) * 4);
 }
 
-body {
-  margin: 0;
-  background-color: #08090a;
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --layout-card-padding: var(--layout-card-padding);
+  --layout-column-gap: var(--layout-column-gap);
+  --layout-section-gap: var(--layout-section-gap);
+  --layout-inset: var(--layout-inset);
+  --layout-sidebar: var(--layout-sidebar);
+  --layout-density-source: var(--layout-density-source);
+  --layout-density: var(--layout-density);
+  --ai-label-foreground: var(--ai-label-foreground);
+  --ai-label: var(--ai-label);
+  --default-transition-timing-function: var(--default-transition-timing-function);
+  --default-transition-duration: var(--default-transition-duration);
+  --ease-in: var(--ease-in);
+  --ease-in-out: var(--ease-in-out);
+  --ease-out: var(--ease-out);
+  --transition-duration-slow: var(--transition-duration-slow);
+  --transition-duration-base: var(--transition-duration-base);
+  --transition-duration-fast: var(--transition-duration-fast);
+  --chart-1: var(--chart-1);
+  --color-destructive-foreground: var(--destructive-foreground);
 }
+
+.dark {
+  --background: oklch(0.139 0.003 246.3);
+  --foreground: oklch(0.978 0.001 197.1);
+  --card: oklch(0.166 0.006 270);
+  --card-foreground: oklch(0.9838 0.0035 247.86);
+  --popover: oklch(0.166 0.006 270);
+  --popover-foreground: oklch(0.978 0.001 197.1);
+  --primary: oklch(0.567 0.159 275.2);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.205 0.008 270);
+  --secondary-foreground: oklch(0.6275 0.0255 283.24);
+  --muted: oklch(0.166 0.006 270);
+  --muted-foreground: oklch(0.701 0.0199 275.78);
+  --accent: oklch(0.237 0.008 270);
+  --accent-foreground: oklch(0.9838 0.0035 247.86);
+  --destructive: oklch(0.3959 0.1331 25.72);
+  --border: oklch(0.27 0.01 270);
+  --input: oklch(0.205 0.008 270);
+  --ring: oklch(0.567 0.159 275.2);
+  --chart-1: var(--primary);
+  --chart-2: oklch(from var(--primary) calc(l - 0.09) calc(c * 0.92) h);
+  --chart-3: oklch(from var(--primary) calc(l - 0.18) calc(c * 0.84) h);
+  --chart-4: oklch(from var(--primary) calc(l - 0.27) calc(c * 0.76) h);
+  --chart-5: oklch(from var(--primary) calc(l - 0.36) calc(c * 0.68) h);
+  /* The linear kit ships no sidebar tokens; map shadcn's to linear ones. */
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --destructive-foreground: oklch(0.9838 0.0035 247.86);
+  --radius: 0.5rem;
+  --transition-duration-fast: 120ms;
+  --transition-duration-base: 160ms;
+  --transition-duration-slow: 220ms;
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-in-out: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+  --ease-in: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+  --default-transition-duration: var(--transition-duration-fast);
+  --default-transition-timing-function: var(--ease-out);
+  --ai-label: var(--muted);
+  --ai-label-foreground: var(--foreground);
+  --layout-density: compact;
+  --layout-density-source: design-system;
+  --layout-sidebar: calc(var(--spacing, 0.25rem) * 46);
+  --layout-inset: calc(var(--spacing, 0.25rem) * 4);
+  --layout-section-gap: calc(var(--spacing, 0.25rem) * 6);
+  --layout-column-gap: calc(var(--spacing, 0.25rem) * 3);
+  --layout-card-padding: calc(var(--spacing, 0.25rem) * 4);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities;

@@ -46,12 +46,14 @@ func main() {
 	})
 
 	err := wails.Run(&options.App{
-		Title:            "Secrio",
-		Width:            1280,
-		Height:           800,
-		MinWidth:         960,
-		MinHeight:        600,
-		BackgroundColour: options.NewRGB(8, 9, 10),
+		Title:     "Secrio",
+		Width:     1280,
+		Height:    800,
+		MinWidth:  960,
+		MinHeight: 600,
+		// The Better Design "linear" --background token, oklch(0.139 0.003
+		// 246.3) = rgb(8 9 10); same value as index.html, so no flash.
+		BackgroundColour: options.NewRGBA(8, 9, 10, 255),
 		AssetServer:      &assetserver.Options{Assets: desktopassets.Assets},
 		// Only the explicit allowlist in desktop.API is exposed to JS.
 		Bind:      []any{desktop.NewAPI(a)},
