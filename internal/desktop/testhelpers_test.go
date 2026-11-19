@@ -1,7 +1,9 @@
 package desktop
 
 import (
+	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,11 +18,22 @@ var cheapKDF = domain.KDFParams{Time: 1, MemoryKiB: 8, Threads: 1}
 
 const testPassword = "correct horse battery staple"
 
+// countingKeys counts Load calls, one per Open of a vault.
+type countingKeys struct {
+	*keychain.MemoryKeyStore
+	loads atomic.Int32
+}
+
+func (c *countingKeys) Load(ctx context.Context, id string) (domain.Key, error) {
+	c.loads.Add(1)
+	return c.MemoryKeyStore.Load(ctx, id)
+}
+
 type testEnv struct {
 	app   *App
 	dir   string
 	fake  *clock.Fake
-	keys  *keychain.MemoryKeyStore
+	keys  *countingKeys
 	newed int // how many times NewService ran
 }
 
@@ -30,7 +43,7 @@ func newTestApp(t *testing.T) *testEnv {
 	env := &testEnv{
 		dir:  t.TempDir(),
 		fake: clock.NewFake(time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)),
-		keys: keychain.NewMemory(),
+		keys: &countingKeys{MemoryKeyStore: keychain.NewMemory()},
 	}
 	env.app = New(Deps{
 		DataDir: func() (string, error) { return env.dir, nil },
