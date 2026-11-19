@@ -87,6 +87,23 @@ func TestVaultCreateAndList(t *testing.T) {
 	}
 }
 
+func TestVaultCreateDuplicateBeforePrompt(t *testing.T) {
+	e := newEnv(t)
+	mkVault(t, e, "Work")
+	for name, want := range map[string]string{
+		"Work": "secrio: vault \"Work\" already exists\n",
+		"work": "secrio: vault \"work\" already exists (names are case-insensitive on this system)\n",
+	} {
+		e.err.Reset()
+		if code := e.run([]string{"pw", "pw"}, "vault", "create", name); code != ExitFailure || e.err.String() != want {
+			t.Errorf("%s: code=%d err=%q", name, code, e.err)
+		}
+		if e.pwCalls != 0 {
+			t.Errorf("%s: prompted %d times", name, e.pwCalls)
+		}
+	}
+}
+
 func TestVaultListEmpty(t *testing.T) {
 	e := newEnv(t)
 	if code := e.run(nil, "vault", "list"); code != ExitOK || e.out.Len() != 0 {

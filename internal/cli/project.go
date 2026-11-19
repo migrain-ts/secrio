@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"secrio/internal/domain"
 )
 
 func newProjectCmd(d Deps, flags *Flags) *cobra.Command {
@@ -20,6 +23,9 @@ func newProjectCmd(d Deps, flags *Flags) *cobra.Command {
 			}
 			defer u.Close()
 			if _, err := u.CreateProject(ctx, args[0], ""); err != nil {
+				if errors.Is(err, domain.ErrDuplicate) {
+					return fmt.Errorf("project %q already exists", args[0])
+				}
 				return err
 			}
 			fmt.Fprintf(d.Out, "created project %s\n", args[0])

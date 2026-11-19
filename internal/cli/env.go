@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"secrio/internal/domain"
 )
 
 func newEnvCmd(d Deps, flags *Flags) *cobra.Command {
@@ -32,6 +35,9 @@ func newEnvCmd(d Deps, flags *Flags) *cobra.Command {
 				return err
 			}
 			if _, err := u.CreateEnvironment(ctx, p.ID, args[0]); err != nil {
+				if errors.Is(err, domain.ErrDuplicate) {
+					return fmt.Errorf("environment %q already exists", args[0])
+				}
 				return err
 			}
 			fmt.Fprintf(d.Out, "created environment %s\n", args[0])

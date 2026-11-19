@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"secrio/internal/core"
 )
 
 func TestValidVaultName(t *testing.T) {
@@ -14,7 +16,20 @@ func TestValidVaultName(t *testing.T) {
 			t.Errorf("%q rejected: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"", "a/b", "..", "a b", strings.Repeat("a", 65), "é", "a\nb"} {
+	for _, ok := range []string{"com0", "com10", "console", "lpt", "nulx", "a.con", "my-aux"} {
+		if err := validVaultName(ok); err != nil {
+			t.Errorf("%q rejected: %v", ok, err)
+		}
+	}
+	bads := []string{"", "a/b", "..", "a b", strings.Repeat("a", 65), "é", "a\nb",
+		"a\n", "a٣", "١٢", "a..b", ".hidden", ".", "...",
+		"con", "CON", "Prn", "aux", "NUL", "com1", "COM9", "lpt1", "Lpt9",
+		"con.txt", "NUL.db", "com3.x.y", "con."}
+	dir := t.TempDir()
+	if _, err := core.VaultPath(dir, "a..b"); err == nil {
+		t.Error("core.VaultPath accepts a..b: CLI and Core disagree")
+	}
+	for _, bad := range bads {
 		err := validVaultName(bad)
 		if err == nil {
 			t.Errorf("%q accepted", bad)

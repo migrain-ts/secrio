@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -35,8 +36,11 @@ func newVaultCreateCmd(d Deps) *cobra.Command {
 				return err
 			}
 			for _, e := range entries {
-				if e.Name == name {
+				switch {
+				case e.Name == name:
 					return fmt.Errorf("vault %q already exists", name)
+				case strings.EqualFold(e.Name, name):
+					return fmt.Errorf("vault %q already exists (names are case-insensitive on this system)", name)
 				}
 			}
 			dir, err := d.DataDir()

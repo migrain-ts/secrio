@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"secrio/internal/app"
 	"secrio/internal/domain"
@@ -13,11 +14,24 @@ var vaultNameRE = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
 // validVaultName checks a vault name against the CLI naming rule.
 func validVaultName(name string) error {
-	// "." and ".." match the pattern but are path components, not names.
-	if !vaultNameRE.MatchString(name) || name == "." || name == ".." {
+	// Names that match the pattern but are path components (".", ".."), hidden
+	// or contain "..", or are Windows device names (also with an extension).
+	if !vaultNameRE.MatchString(name) || strings.HasPrefix(name, ".") ||
+		strings.Contains(name, "..") || windowsReserved(name) {
 		return fmt.Errorf("invalid vault name %q: use letters, digits, '.', '_' or '-' (max 64)", name)
 	}
 	return nil
+}
+
+// windowsReserved reports whether name (case-insensitively, ignoring any
+// extension) is a Windows device name: con prn aux nul com1-9 lpt1-9.
+func windowsReserved(name string) bool {
+	base, _, _ := strings.Cut(strings.ToLower(name), ".")
+	switch base {
+	case "con", "prn", "aux", "nul":
+		return true
+	}
+	return len(base) == 4 && (base[:3] == "com" || base[:3] == "lpt") && base[3] >= '1' && base[3] <= '9'
 }
 
 // resolveVault finds a registered vault by exact name; a duplicate name is an

@@ -35,6 +35,9 @@ func TestProjectCreateDuplicate(t *testing.T) {
 	if code := e.run(nil, "--vault", "work", "project", "create", "api"); code != ExitFailure || e.out.Len() != 0 {
 		t.Fatalf("code=%d out=%q err=%q", code, e.out, e.err)
 	}
+	if e.err.String() != "secrio: project \"api\" already exists\n" {
+		t.Fatalf("err=%q", e.err)
+	}
 }
 
 func TestEnvCreateDuplicate(t *testing.T) {
@@ -43,6 +46,9 @@ func TestEnvCreateDuplicate(t *testing.T) {
 	e.run(nil, "--vault", "work", "--project", "api", "env", "create", "dev")
 	if code := e.run(nil, "--vault", "work", "--project", "api", "env", "create", "dev"); code != ExitFailure {
 		t.Fatalf("code=%d err=%q", code, e.err)
+	}
+	if e.err.String() != "secrio: environment \"dev\" already exists\n" {
+		t.Fatalf("err=%q", e.err)
 	}
 }
 
