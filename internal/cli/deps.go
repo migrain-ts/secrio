@@ -24,6 +24,7 @@ type Deps struct {
 	ReadPassword func(prompt string) ([]byte, error) // masked, from the terminal
 	DataDir      func() (string, error)
 	NewService   func() (*app.Service, error) // wraps core.New(dataDir)
+	Run          RunFunc                      // runs `run`'s child process
 }
 
 // RealDeps wires the process environment.
@@ -57,5 +58,6 @@ func RealDeps() Deps {
 			}
 			return core.New(dir)
 		},
+		Run: systemRunner(nil),
 	}
 }

@@ -46,6 +46,7 @@ func NewRoot(d Deps) *cobra.Command {
 		newListCmd(d, &flags),
 		newSetCmd(d, &flags),
 		newGetCmd(d, &flags),
+		newRunCmd(d, &flags),
 	)
 
 	finalize(root)
@@ -123,7 +124,8 @@ func run(d Deps, root *cobra.Command, args []string) int {
 	finalize(root)
 	root.SetArgs(args)
 	err := root.Execute()
-	if err != nil {
+	var ee *ExitError
+	if err != nil && !(errors.As(err, &ee) && ee.Err == nil) { // Err nil: code only (run's child)
 		fmt.Fprintf(d.Err, "secrio: %s\n", err)
 	}
 	return exitCode(err)
