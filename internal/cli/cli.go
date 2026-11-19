@@ -41,6 +41,9 @@ func NewRoot(d Deps) *cobra.Command {
 		newVaultCmd(d, &flags),
 		newUnlockCmd(d, &flags),
 		newLockCmd(d, &flags),
+		newProjectCmd(d, &flags),
+		newEnvCmd(d, &flags),
+		newListCmd(d, &flags),
 	)
 
 	finalize(root)
