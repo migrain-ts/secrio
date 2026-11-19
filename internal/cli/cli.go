@@ -40,17 +40,42 @@ func NewRoot(d Deps) *cobra.Command {
 
 	// Subcommands: one constructor call per line, appended by later tasks.
 
-	usageArgs(root)
+	finalize(root)
 	return root
 }
+
+// finalize adds Cobra's built-in help and completion commands (normally added
+// lazily inside Execute, and only once the root has subcommands) and applies
+// usageArgs to the whole tree. Idempotent; run calls it again so commands
+// added after NewRoot are covered too.
+func finalize(root *cobra.Command) {
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
+	usageArgs(root)
+}
+
+const usageArgsMark = "secrio.usageargs"
 
 // usageArgs makes every argument-validation error exit 2, for all commands
 // in the tree (including ones added by later tasks). Groups (commands with
 // subcommands and no Args) reject positional arguments as unknown commands;
-// leaves without Args keep Cobra's default; errors already carrying an
-// *ExitError keep their code.
+// leaves without Args accept none (they must opt in with Args); errors
+// already carrying an *ExitError keep their code. Idempotent.
 func usageArgs(cmd *cobra.Command) {
+	for _, c := range cmd.Commands() {
+		usageArgs(c)
+	}
+	if cmd.Annotations[usageArgsMark] != "" {
+		return
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[usageArgsMark] = "1"
+
 	switch {
+	case cmd.Name() == "help" && cmd.Parent() != nil && cmd.Parent().Parent() == nil:
+		return // Cobra's built-in help takes any command path
 	case cmd.Args == nil && cmd.HasSubCommands():
 		cmd.Args = func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
@@ -62,7 +87,10 @@ func usageArgs(cmd *cobra.Command) {
 			// A non-runnable command short-circuits to help before Args runs.
 			cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
 		}
-	case cmd.Args != nil:
+	default:
+		if cmd.Args == nil {
+			cmd.Args = cobra.NoArgs
+		}
 		inner := cmd.Args
 		cmd.Args = func(c *cobra.Command, args []string) error {
 			err := inner(c, args)
@@ -72,9 +100,6 @@ func usageArgs(cmd *cobra.Command) {
 			}
 			return UsageErr("%v", err)
 		}
-	}
-	for _, c := range cmd.Commands() {
-		usageArgs(c)
 	}
 }
 
@@ -87,6 +112,7 @@ func Execute(d Deps, args []string) int {
 }
 
 func run(d Deps, root *cobra.Command, args []string) int {
+	finalize(root)
 	root.SetArgs(args)
 	err := root.Execute()
 	if err != nil {

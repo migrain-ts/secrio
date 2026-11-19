@@ -163,6 +163,61 @@ func TestHelpExitsZero(t *testing.T) {
 	}
 }
 
+func TestCompletionExtraArgIsUsage(t *testing.T) {
+	dummy := &cobra.Command{Use: "dummy", RunE: func(*cobra.Command, []string) error { return nil }}
+	if code, _, errb := runWith(t, []string{"completion", "bash", "extra"}, dummy); code != ExitUsage {
+		t.Fatalf("code=%d stderr=%q", code, errb)
+	}
+}
+
+func TestCompletionBashScript(t *testing.T) {
+	dummy := &cobra.Command{Use: "dummy", RunE: func(*cobra.Command, []string) error { return nil }}
+	if code, out, _ := runWith(t, []string{"completion", "bash"}, dummy); code != ExitOK || !strings.Contains(out, "bash") {
+		t.Fatalf("code=%d", code)
+	}
+}
+
+func TestHelpCommandStillWorks(t *testing.T) {
+	dummy := &cobra.Command{Use: "dummy", Short: "d", RunE: func(*cobra.Command, []string) error { return nil }}
+	code, out, errb := runWith(t, []string{"help", "dummy"}, dummy)
+	if code != ExitOK || errb != "" || out == "" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errb)
+	}
+}
+
+func TestLeafDefaultsToNoArgs(t *testing.T) {
+	leaf := func(a cobra.PositionalArgs) *cobra.Command {
+		return &cobra.Command{Use: "leaf", Args: a, RunE: func(*cobra.Command, []string) error { return nil }}
+	}
+	if code, _, _ := runWith(t, []string{"leaf", "x"}, leaf(nil)); code != ExitUsage {
+		t.Errorf("nil Args with arg: code=%d", code)
+	}
+	if code, _, _ := runWith(t, []string{"leaf"}, leaf(nil)); code != ExitOK {
+		t.Errorf("nil Args no arg: code=%d", code)
+	}
+	if code, _, _ := runWith(t, []string{"leaf", "x"}, leaf(cobra.ExactArgs(1))); code != ExitOK {
+		t.Errorf("ExactArgs(1): code=%d", code)
+	}
+}
+
+func TestUsageArgsIdempotent(t *testing.T) {
+	d, _, _ := testDeps()
+	root := NewRoot(d)
+	leaf := &cobra.Command{Use: "leaf", Args: cobra.ExactArgs(1), RunE: func(*cobra.Command, []string) error { return nil }}
+	grp := &cobra.Command{Use: "grp"}
+	grp.AddCommand(&cobra.Command{Use: "sub", RunE: func(*cobra.Command, []string) error { return nil }})
+	root.AddCommand(leaf, grp)
+	usageArgs(root)
+	usageArgs(root)
+	usageArgs(root)
+	for args, want := range map[string]int{"leaf": ExitUsage, "leaf a": ExitOK, "leaf a b": ExitUsage, "grp": ExitOK, "grp x": ExitUsage, "grp sub": ExitOK, "nope": ExitUsage} {
+		d, _, _ := testDeps()
+		if got := run(d, root, strings.Fields(args)); got != want {
+			t.Errorf("%q: code=%d want %d", args, got, want)
+		}
+	}
+}
+
 func TestExecuteNilArgsIgnoresOSArgs(t *testing.T) {
 	old := os.Args
 	os.Args = []string{"secrio", "bogus-from-os-args"}
