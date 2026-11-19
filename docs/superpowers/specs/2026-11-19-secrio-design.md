@@ -144,7 +144,7 @@ Validées par l'utilisateur :
 
 Choix du rédacteur (à vérifier à la relecture) :
 - **Volume visé** : centaines de secrets par env, milliers par coffre. Déchiffrement complet en mémoire, pas d'index aveugle.
-- **Session** : contient la clé du coffre ; reste valide après changement de mot de passe (réenveloppe de la même clé). Une exécution `run` lit dans une transaction de lecture unique (instantané cohérent).
+- **Session** (amendé le 2026-11-19 après la relecture finale) : le keychain de l'OS ne contient qu'une clé de session aléatoire par session (32 octets) ; la clé du coffre est scellée sous cette clé dans la ligne `sessions` du fichier du coffre. `Lock` et l'expiration (TTL, inactivité) suppriment la ligne. Un élément de keychain seul, ou un fichier de coffre seul, ne permet pas d'ouvrir le coffre ; limite assumée : un attaquant du même utilisateur qui lit les deux pendant une session active obtient la clé du coffre. Reste valide après changement de mot de passe (réenveloppe de la même clé). Une exécution `run` lit dans une transaction de lecture unique (instantané cohérent).
 - **Verrouillage** (TTL de session et inactivité) géré par le Core via un port d'horloge.
 - **Historique** : trace valeurs, noms, création/suppression de secrets et d'envs ; chiffré sous la clé d'env (supprimer un env supprime son historique) ; pas de limite de rétention en v1 ; restauration = ressaisie du mot de passe. La table d'historique existe dès l'étape 1 (pas de migration ultérieure) ; l'UI vient plus tard.
 - **Mot de passe non interactif** : `SECRIO_PASSWORD` ou stdin pour les scripts. L'accès CI complet reste hors v1.

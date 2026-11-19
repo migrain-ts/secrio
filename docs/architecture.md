@@ -25,17 +25,17 @@ domain  <-  app  <-  core (composition root)  ->  infra/*
 | Package | Role |
 |---|---|
 | `domain` | `Vault`, `Project`, `Environment`, `Secret` (redacted under every fmt verb), `ID[T]`, `Key` (32 bytes), `KDFParams`, `SecretName` (`[A-Za-z_][A-Za-z0-9_]*`), sentinel errors |
-| `app` | `Service` (create/list/unlock/lock/open/change password), `Unlocked` (projects, environments, secrets, history, compare, `ProcessEnv`, import/export), ports, sealed-record codec, key hierarchy (`keys.go`) |
+| `app` | `Service` (create/list/unlock/lock/open/change password), `Unlocked` (projects, environments, secrets, history, compare, `ProcessEnv`, import/export), ports (including `SessionKeys` and the four session methods of `RecordStore`), sealed-record codec, key hierarchy (`keys.go`), session flow (`service.go`, `session.go`) |
 | `app/importexport` | Pure parse/write of dotenv, JSON, YAML entry lists |
 | `infra/crypto` | `Suite`: XChaCha20-Poly1305 sealing and Argon2id derivation; satisfies both `app.Cipher` and `app.KDF` |
-| `infra/sqlite` | `Opener` / `Store`: record store on a SQLite file (modernc, pure Go), embedded migrations, WAL, 0600 |
+| `infra/sqlite` | `Opener` / `Store`: record store on a SQLite file (modernc, pure Go), embedded migrations (`0001_init`, `0002_sessions`), WAL, 0600; atomic `PutSession/GetSession/TouchSession/DeleteSession` on the single-row `sessions` table (`session.go`) |
 | `infra/registry` | `Registry`: list of known vaults in `<dataDir>/vaults.json` |
-| `infra/keychain` | `SessionStore` (OS keychain via go-keyring) and `MemorySessionStore` |
+| `infra/keychain` | `KeyStore` (OS keychain via go-keyring; holds only a 32-byte session key) and `MemoryKeyStore`; both implement `app.SessionKeys` |
 | `infra/clock` | `System` (UTC now) and `Fake` |
 | `core` | `New`, options, `DefaultDataDir`, `VaultPath` |
 | `tests` | Black-box end-to-end and security tests through `core.New` |
 
-`core.New(dataDir, opts...)` creates `dataDir` (0700) and builds: `crypto.Suite{}` as cipher and KDF, `sqlite.Opener{}`, `registry.New(dataDir)`, `keychain.New("secrio")`, `clock.System{}`, `crypto.DefaultKDFParams()`. Options: `WithKDFParams`, `WithSessionStore`, `WithClock`. `VaultPath(dataDir, name)` returns `<dataDir>/vaults/<name>.db` (vaults dir 0700) and rejects empty names, `/`, `\`, `..` and NUL.
+`core.New(dataDir, opts...)` creates `dataDir` (0700) and builds: `crypto.Suite{}` as cipher and KDF, `sqlite.Opener{}`, `registry.New(dataDir)`, `keychain.New("secrio")`, `clock.System{}`, `crypto.DefaultKDFParams()`. Options: `WithKDFParams`, `WithSessionKeys`, `WithClock`. `VaultPath(dataDir, name)` returns `<dataDir>/vaults/<name>.db` (vaults dir 0700) and rejects empty names, `/`, `\`, `..` and NUL.
 
 ## 4. Key hierarchy
 
@@ -80,13 +80,25 @@ Plaintext leaks by design: the vault name, KDF parameters, salt, vault id, recor
 
 ## 6. Session model
 
-- `Unlock(vaultID, password, ttl, idle)` verifies the password and stores a `Session` (vault key, `ExpiresAt`, `LastUsed`, `Idle`) in the `SessionStore`. `ttl` must be positive; `idle <= 0` disables the idle timeout.
-- The production store is the OS keychain: service `secrio`, user = vault id, value = JSON with the base64 key and RFC 3339 times.
-- `Open(vaultID)` loads the session. Missing, past `ExpiresAt`, or idle for `Idle` or longer gives `ErrLocked` (an expired session is deleted). Success bumps `LastUsed`. `Lock` deletes the session. `OpenWithPassword` never touches the session store.
-- All of `Open`, `Lock`, `Unlock` take one in-process mutex (`sessionMu`) so a `Lock` cannot be undone by a concurrent `Open` in the same process.
-- Limit: the mutex does not span processes. A `Lock` from another process during the short Load-to-Save window of an `Open` can be undone; the session then lives until TTL or idle expiry.
-- Sessions are shared between processes through the keychain: two `core.New` on the same keychain see each other's unlock and lock (`TestSessionSharedBetweenTwoServices`).
-- Time comes from the `Clock` port so TTL/idle are testable.
+A session has two halves, both needed to open the vault:
+
+- Half 1, the OS keychain (`app.SessionKeys`, production `keychain.KeyStore`): service `secrio`, user = vault id, value = the base64 of a fresh random 32-byte session key. Nothing else; never the vault key, an env key or a password.
+- Half 2, the `sessions` table of the vault file (migration `0002_sessions.sql`, single row `id = 1`): `blob` = `Cipher.Seal(sessionKey, vaultKey, aad = "session|" + vaultID)`, plus `expires_at`, `last_used` and `idle_ms`. All times are unix milliseconds; `idle_ms = 0` means no idle limit; a positive idle below 1 ms is stored as 1 ms.
+
+Flow:
+
+- `Unlock(vaultID, password, ttl, idle)` verifies the password, draws a new session key, writes the row (`PutSession`), then saves the key (`SessionKeys.Save`). If the save fails the row is deleted again. `ttl` must be positive; a negative `idle` is treated as 0 (no idle timeout). A second `Unlock` replaces both halves, so earlier session keys stop working.
+- `Open(vaultID)` loads the session key, then runs `TouchSession`, one conditional `UPDATE ... SET last_used=now WHERE row exists AND expires_at > now AND (idle_ms = 0 OR now - last_used < idle_ms)`, then reads the row and opens the blob. Success bumps `LastUsed` only, never `ExpiresAt`.
+- Fail closed: no key, no row, expired, idle, a blob that does not authenticate under the key (tampered, truncated, from another vault) or a wrong-length plaintext all give `ErrLocked`, and whatever is left of the session (row and/or key) is deleted. Exceptions that keep the row: a keychain error other than a miss (transient failure) is returned as is; and when `TouchSession` succeeds but the row is gone by the time it is read (a concurrent `Lock`), `Open` returns `ErrLocked` without further cleanup because the `Lock` owns it.
+- `Lock(vaultID)` deletes the row first (it is the credential), then the keychain key; it is idempotent. `OpenWithPassword` never touches session state.
+- Atomicity across processes: `Lock` and `Open` meet in the vault file. Once a `Lock` has deleted the row, the conditional `UPDATE` cannot match, so an `Open` can never resurrect a session another process locked. The old in-process mutex (`sessionMu`) is gone; nothing in `app` serialises session calls (`TestLockNotUndoneByConcurrentOpen`).
+- Sessions are shared between processes: two `core.New` on the same keychain and vault file see each other's unlock and lock (`TestSessionSharedBetweenTwoServices`, `TestSessionSharedAndKilledAcrossServices`).
+- Time comes from the `Clock` port, so TTL and idle are testable (`TestSessionExpiryEndToEnd`).
+- `ChangePassword` keeps existing sessions valid: it re-wraps the same vault key, and the session row seals that key, not the password.
+- Unknown vault id: `Open` and `Lock` return `ErrNotFound` (`Lock` still deletes any keychain key stored under that id). A garbage vault file makes `Open` return `ErrCorrupt`, not `ErrLocked`: the file is read before the keychain.
+- A damaged keychain item (not base64 of 32 bytes, or a go-keyring prefix decode failure) makes `Open` return `ErrCorrupt` and the row is kept; `Lock` or the next `Unlock` replaces the item.
+- `Open` racing another process's `Unlock` can delete the freshly written session (it sees the new row with the old key, fails to open it and cleans up). This fails closed; retry `Unlock`.
+- `Lock` returns an error if the vault file cannot be opened or `DeleteSession` fails, and also joins a `keychain` delete failure. In every case `Lock` still attempts the keychain delete, and either half missing makes the session unusable, so one failure alone leaves no usable session (the leftover half is cleaned by the next `Open`/`Unlock`). Only when both halves fail to be removed (for example store open and keychain delete both fail) can a session survive; a caller cannot tell these apart, so it should treat any `Lock` error as "maybe still unlocked" and retry.
 - Handle lifecycle: an open `*Unlocked` does NOT observe `Lock`, TTL expiry or idle expiry; those are checked only inside `Service.Open`. The handle keeps working on its in-memory key until `Close`, and its own use does not refresh the session's `LastUsed`. Front ends must therefore call `Open` per operation or short burst, `Close` handles promptly, and never cache a handle across user idle time.
 - After `Close` every `Unlocked` method returns `ErrLocked` (one guard, `enter`); `Close` is idempotent and safe against a concurrent call (it waits for calls in flight).
 - `CreateVault` registers the absolute path. If it fails after the file was created, it closes the store and removes the file and its `-wal`/`-shm`.
@@ -96,12 +108,12 @@ Plaintext leaks by design: the vault name, KDF parameters, salt, vault id, recor
 | Error | Meaning | Raised when |
 |---|---|---|
 | `ErrInvalidPassword` | Wrong password | Wrapped vault key fails to authenticate (`Unlock`, `OpenWithPassword`, `ChangePassword`, `RestoreVersion`) |
-| `ErrLocked` | No usable session | No session, TTL expired, idle expired |
-| `ErrCorrupt` | Stored data is damaged or tampered | Record or env key fails to authenticate under the right key, JSON undecodable, truncated blob, KDF params out of range, not a SQLite file, vault id differs from registry, secret in the wrong env |
+| `ErrLocked` | No usable session | No session, TTL expired, idle expired, row without keychain key or key without row, session blob that does not authenticate under the keychain key |
+| `ErrCorrupt` | Stored data is damaged or tampered | Record or env key fails to authenticate under the right key, JSON undecodable, truncated blob, KDF params out of range, not a SQLite file (also from `Open`, which reads the file before the keychain), vault id differs from registry, secret in the wrong env, keychain item that is not a base64 32-byte key (including a go-keyring prefix decode failure) |
 | `ErrAuthFailed` | Cipher-level authentication failure | Returned by `Cipher.Open`; `app` converts it to `ErrInvalidPassword` (vault key) or `ErrCorrupt` (any record), so front ends normally do not see it |
 | `ErrUnsupportedFormat` | Format not understood | Unknown `format_version`, newer migrations, unknown or malformed import/export input |
 | `ErrUnsupportedValue` | Value cannot be used as asked | NUL in a value passed to `ProcessEnv`; non-UTF-8 value for JSON/YAML export |
-| `ErrNotFound` | Missing item | Unknown vault, project, environment, secret, history entry; missing vault file |
+| `ErrNotFound` | Missing item | Unknown vault id (also from `Open` and `Lock`), project, environment, secret, history entry; missing vault file |
 | `ErrDuplicate` | Name or path taken | Project or environment name, vault path already exists, duplicate vault id, repeated import name |
 | `ErrInvalidName` | Rejected name | Blank display name, bad secret name, unknown secret type, bad `VaultPath` file name |
 
@@ -127,7 +139,8 @@ Error text never contains secret names, values, passwords or file content (drive
 - Hostile vault files: stored KDF parameters are bounded (time 1-64, threads 1-64, memory 8 KiB-1 GiB) before any derivation; out-of-range values give `ErrCorrupt`. A non-empty file shorter than the 100-byte SQLite header is refused instead of being overwritten.
 - Logging: `Secret`, `HistoryEntry`, `ImportPlan` and `importexport.Entry` print as `<redacted>` for every fmt verb; the app layer does not log (`TestLogsContainNoSecrets`).
 - Go memory: keys are zeroed after use (`zeroKey`) and password-derived keys are zeroed, but Go gives no guarantee: the GC may have copied buffers, and secret values returned to callers are ordinary byte slices. Swap and core dumps are out of scope.
-- Session key in the OS keychain: the item holds the RAW permanent vault key (not a per-session key), so anyone who reads it can decrypt the vault file, and the key stays valid even after `ChangePassword` (which only re-wraps it). TTL and idle expiry are enforced by the app only; an expired item stays in the keychain until some `Open` or `Lock` runs. On macOS go-keyring calls the `security` CLI, so any process running as the user may read the item. Recommend short TTLs and calling `Lock` on exit.
+- Sessions (amended 2026-11-19 after the final review). The keychain holds only a random per-session key; the vault key lives sealed under it in the `sessions` row of the vault file (section 6). What this improves: the keychain item alone is useless (without the vault file it opens nothing, and it is not the vault key); a vault file or backup alone is useless (the row is sealed under a key that is not in it); `Lock` and expiry delete the row, so a leaked or stale keychain item is dead (`TestLeakedKeychainItemUselessAfterLock`); TTL and idle are enforced by the data (an `UPDATE` that matches no expired or idle row), not only by app code; `Lock` versus `Open` is atomic across processes; the in-process mutex is gone; the keychain never receives the vault key (`TestKeychainHoldsNoVaultKey`, `TestKeychainNeverReceivesVaultKey`).
+- What does NOT improve: a same-user attacker who reads BOTH the keychain item and the vault file during a live session recovers the vault key (on macOS go-keyring calls the `security` CLI, so any process running as the user may read the item). Handles still do not observe `Lock`. `ChangePassword` keeps sessions valid. A stale backup of the vault file contains an inert session row (its key is gone from the keychain once the session ended), but a backup taken during a live session plus the live keychain item opens the vault until that session ends. Recommend short TTLs and calling `Lock` on exit.
 - `core.New` only creates a missing data directory with 0700; it does not tighten an already-existing wider one.
 - `CompareEnvs` and `ProcessEnv` decrypt every value of the environments involved. `ProcessEnv` fails the whole environment on a NUL value and deliberately does not name it. Restoring a value equal to the current one is a silent no-op (no event). Multi-line quoted dotenv values are not supported in v1; import treats an unquoted `#` as a comment only after whitespace (`KEY=#abc` is the literal `#abc`) and strips a leading UTF-8 BOM from all formats.
 - `secure_delete(1)` zeroes freed pages only. Old ciphertext (for example a previous password's wrapped vault key) may linger in backups, copied WAL files or filesystem snapshots.
@@ -138,7 +151,7 @@ Error text never contains secret names, values, passwords or file content (drive
 ## 11. Testing strategy
 
 - Unit tests per package with fakes: `app` runs on an in-memory record store, cheap test cipher and KDF, fake clock, fake registry and sessions; `infra/*` test their adapters (including real SQLite files in temp dirs and the go-keyring mock).
-- `tests/` is black-box: real adapters through `core.New`, `t.TempDir()`, `keyring.MockInit()` and cheap KDF params `{Time:1, MemoryKiB:8, Threads:1}`. It covers the end-to-end flow, plaintext absence in the `.db`, `-wal` and `-shm` files, file modes, blob corruption and blob swapping via raw SQL, future format versions, garbage files, log hygiene, shared sessions across two services, concurrent writers (run under `-race`; the go-keyring mock is not goroutine-safe, so that test shares a `MemorySessionStore`) and a real child process receiving secrets.
+- `tests/` is black-box: real adapters through `core.New`, `t.TempDir()`, `keyring.MockInit()` and cheap KDF params `{Time:1, MemoryKiB:8, Threads:1}`. It covers the end-to-end flow, plaintext absence in the `.db`, `-wal` and `-shm` files, file modes, blob corruption and blob swapping via raw SQL, future format versions, garbage files, log hygiene, session hardening (what the keychain and the `sessions` row hold, a leaked key after `Lock`, orphan halves, TTL and idle expiry with a fake clock, shared and killed sessions across two services; `tests/session_test.go`), concurrent writers (run under `-race`; the go-keyring mock is not goroutine-safe, so that test shares a `MemoryKeyStore`) and a real child process receiving secrets.
 - Checks before every commit: `gofmt -l .` empty, `go vet ./...`, `go test -race -count=1 ./...`.
 
 ## 12. How CLI and Desktop plug in
