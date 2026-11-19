@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -63,17 +65,33 @@ func (s *Service) CreateVault(ctx context.Context, name, path string, password [
 	meta.Name = name
 	meta.CreatedAt = s.clock.Now().UTC()
 
-	st, err := s.opener.Create(ctx, path)
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return domain.Vault{}, errors.New("resolve vault path")
+	}
+	st, err := s.opener.Create(ctx, abs)
 	if err != nil {
 		return domain.Vault{}, err
 	}
-	defer closeInto(&err, st)
+	registered := false
+	defer func() {
+		if registered {
+			closeInto(&err, st)
+			return
+		}
+		// Creation failed after the file exists: leave nothing behind.
+		_ = st.Close()
+		for _, suffix := range []string{"", "-wal", "-shm"} {
+			_ = os.Remove(abs + suffix) // best effort; not-exist is fine
+		}
+	}()
 	if err := st.PutMeta(ctx, meta); err != nil {
 		return domain.Vault{}, err
 	}
-	if err := s.reg.Add(ctx, VaultEntry{ID: meta.ID, Name: name, Path: path}); err != nil {
+	if err := s.reg.Add(ctx, VaultEntry{ID: meta.ID, Name: name, Path: abs}); err != nil {
 		return domain.Vault{}, err
 	}
+	registered = true
 	return domain.Vault{ID: domain.ID[domain.Vault](meta.ID), Name: name, CreatedAt: meta.CreatedAt}, nil
 }
 
