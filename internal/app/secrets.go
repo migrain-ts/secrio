@@ -22,6 +22,11 @@ var knownSecretTypes = map[domain.SecretType]bool{
 // An empty typ means domain.TypeText.
 func (u *Unlocked) SetSecret(ctx context.Context, envID domain.ID[domain.Environment], name domain.SecretName,
 	value []byte, typ domain.SecretType, desc string) (domain.Secret, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return domain.Secret{}, lerr
+	}
+	defer done()
 	if _, err := domain.ParseSecretName(string(name)); err != nil {
 		return domain.Secret{}, err
 	}
@@ -48,7 +53,12 @@ func (u *Unlocked) SetSecret(ctx context.Context, envID domain.ID[domain.Environ
 }
 
 func (u *Unlocked) GetSecret(ctx context.Context, envID domain.ID[domain.Environment], name domain.SecretName) (domain.Secret, error) {
-	secrets, err := u.ListSecrets(ctx, envID)
+	done, lerr := u.enter()
+	if lerr != nil {
+		return domain.Secret{}, lerr
+	}
+	defer done()
+	secrets, err := u.listSecrets(ctx, envID)
 	if err != nil {
 		return domain.Secret{}, err
 	}
@@ -61,6 +71,17 @@ func (u *Unlocked) GetSecret(ctx context.Context, envID domain.ID[domain.Environ
 
 // ListSecrets returns the environment's secrets sorted by name.
 func (u *Unlocked) ListSecrets(ctx context.Context, envID domain.ID[domain.Environment]) ([]domain.Secret, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return nil, lerr
+	}
+	defer done()
+	return u.listSecrets(ctx, envID)
+}
+
+// listSecrets is ListSecrets without the lifecycle guard, for methods that
+// already hold it.
+func (u *Unlocked) listSecrets(ctx context.Context, envID domain.ID[domain.Environment]) ([]domain.Secret, error) {
 	key, err := u.envKey(ctx, u.store, envID)
 	if err != nil {
 		return nil, err
@@ -75,6 +96,11 @@ func (u *Unlocked) ListSecrets(ctx context.Context, envID domain.ID[domain.Envir
 }
 
 func (u *Unlocked) DeleteSecret(ctx context.Context, envID domain.ID[domain.Environment], name domain.SecretName) error {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return lerr
+	}
+	defer done()
 	return u.store.Tx(ctx, func(tx RecordStore) error {
 		key, err := u.envKey(ctx, tx, envID)
 		if err != nil {

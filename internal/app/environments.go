@@ -12,6 +12,11 @@ import (
 
 // CreateEnvironment creates an environment with its own new env key.
 func (u *Unlocked) CreateEnvironment(ctx context.Context, projectID domain.ID[domain.Project], name string) (domain.Environment, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return domain.Environment{}, lerr
+	}
+	defer done()
 	if err := validName(name); err != nil {
 		return domain.Environment{}, err
 	}
@@ -41,6 +46,11 @@ func (u *Unlocked) CreateEnvironment(ctx context.Context, projectID domain.ID[do
 
 // ListEnvironments returns the project's environments sorted by name.
 func (u *Unlocked) ListEnvironments(ctx context.Context, projectID domain.ID[domain.Project]) ([]domain.Environment, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return nil, lerr
+	}
+	defer done()
 	envs, err := u.listEnvsTx(ctx, u.store, projectID)
 	if err != nil {
 		return nil, err
@@ -51,6 +61,11 @@ func (u *Unlocked) ListEnvironments(ctx context.Context, projectID domain.ID[dom
 
 // DeleteEnvironment deletes the environment, its env key and its secrets.
 func (u *Unlocked) DeleteEnvironment(ctx context.Context, envID domain.ID[domain.Environment]) error {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return lerr
+	}
+	defer done()
 	return u.store.Tx(ctx, func(tx RecordStore) error {
 		if _, err := getRecord[domain.Environment](ctx, tx, u.c, u.key, KindEnvironment, string(envID)); err != nil {
 			return err

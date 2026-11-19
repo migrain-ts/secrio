@@ -15,6 +15,11 @@ type Presence map[domain.SecretName]map[domain.ID[domain.Environment]]bool
 // false). Duplicate ids are ignored; an unknown environment is
 // domain.ErrNotFound; no ids yields an empty Presence.
 func (u *Unlocked) CompareEnvs(ctx context.Context, envIDs ...domain.ID[domain.Environment]) (Presence, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return Presence{}, lerr
+	}
+	defer done()
 	ids := make([]domain.ID[domain.Environment], 0, len(envIDs))
 	seen := map[domain.ID[domain.Environment]]bool{}
 	for _, id := range envIDs {
@@ -26,7 +31,7 @@ func (u *Unlocked) CompareEnvs(ctx context.Context, envIDs ...domain.ID[domain.E
 	has := make(map[domain.ID[domain.Environment]]map[domain.SecretName]bool, len(ids))
 	names := map[domain.SecretName]bool{}
 	for _, id := range ids {
-		secrets, err := u.ListSecrets(ctx, id)
+		secrets, err := u.listSecrets(ctx, id)
 		if err != nil {
 			return nil, err
 		}

@@ -4,23 +4,40 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"secrio/internal/domain"
 )
 
 // Unlocked is an open vault with its vault key in memory. The caller must
-// Close it. It is not safe for concurrent use and must not be used after
-// Close.
+// Close it. It is not safe for concurrent use, but after Close every method
+// returns domain.ErrLocked, and Close itself may race with other calls (it
+// waits for calls in flight).
 type Unlocked struct {
 	c     Cipher
 	kdf   KDF
 	clock Clock
-	store RecordStore
-	key   domain.Key // vault key
+	mu    sync.RWMutex // methods hold R; Close holds W
+	store RecordStore  // nil once closed
+	key   domain.Key   // vault key
+}
+
+// enter is the guard every exported method starts with: it fails with
+// domain.ErrLocked after Close, otherwise returns the release func to defer.
+// Methods must not call each other's exported forms (nested R locks).
+func (u *Unlocked) enter() (func(), error) {
+	u.mu.RLock()
+	if u.store == nil {
+		u.mu.RUnlock()
+		return nil, domain.ErrLocked
+	}
+	return u.mu.RUnlock, nil
 }
 
 // Close zeroes the vault key and closes the store. It is idempotent.
 func (u *Unlocked) Close() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	zeroKey(&u.key)
 	if u.store == nil {
 		return nil

@@ -32,7 +32,12 @@ func envNameEq(a, b string, fold bool) bool {
 // placed in a process environment and yields domain.ErrUnsupportedValue
 // (the error names neither the secret nor its value).
 func (u *Unlocked) ProcessEnv(ctx context.Context, envID domain.ID[domain.Environment], base []string) ([]string, error) {
-	secrets, err := u.ListSecrets(ctx, envID) // sorted by name
+	done, lerr := u.enter()
+	if lerr != nil {
+		return nil, lerr
+	}
+	defer done()
+	secrets, err := u.listSecrets(ctx, envID) // sorted by name
 	if err != nil {
 		return nil, err
 	}

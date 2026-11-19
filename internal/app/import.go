@@ -34,7 +34,12 @@ func (ImportPlan) Format(f fmt.State, _ rune) { _, _ = f.Write([]byte(redactedPl
 
 // PlanImport lists which entries are new and which already exist in envID.
 func (u *Unlocked) PlanImport(ctx context.Context, envID domain.ID[domain.Environment], entries []importexport.Entry) (ImportPlan, error) {
-	existing, err := u.ListSecrets(ctx, envID)
+	done, lerr := u.enter()
+	if lerr != nil {
+		return ImportPlan{}, lerr
+	}
+	defer done()
+	existing, err := u.listSecrets(ctx, envID)
 	if err != nil {
 		return ImportPlan{}, err
 	}
@@ -66,6 +71,11 @@ func (u *Unlocked) PlanImport(ctx context.Context, envID domain.ID[domain.Enviro
 // recording history like SetSecret. Existing names are left alone under
 // StrategySkip and replaced under StrategyOverwrite.
 func (u *Unlocked) ApplyImport(ctx context.Context, envID domain.ID[domain.Environment], plan ImportPlan, s Strategy) error {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return lerr
+	}
+	defer done()
 	if s != StrategySkip && s != StrategyOverwrite {
 		return fmt.Errorf("unknown import strategy")
 	}
@@ -98,7 +108,12 @@ func (u *Unlocked) ApplyImport(ctx context.Context, envID domain.ID[domain.Envir
 // Export writes the named secrets (all when names is empty) in format f.
 // A requested name that does not exist is domain.ErrNotFound.
 func (u *Unlocked) Export(ctx context.Context, envID domain.ID[domain.Environment], names []domain.SecretName, f importexport.Format, w io.Writer) error {
-	secrets, err := u.ListSecrets(ctx, envID)
+	done, lerr := u.enter()
+	if lerr != nil {
+		return lerr
+	}
+	defer done()
+	secrets, err := u.listSecrets(ctx, envID)
 	if err != nil {
 		return err
 	}

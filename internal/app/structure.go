@@ -17,6 +17,11 @@ import (
 // --- Projects ---
 
 func (u *Unlocked) CreateProject(ctx context.Context, name, desc string) (domain.Project, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return domain.Project{}, lerr
+	}
+	defer done()
 	if err := validName(name); err != nil {
 		return domain.Project{}, err
 	}
@@ -35,6 +40,11 @@ func (u *Unlocked) CreateProject(ctx context.Context, name, desc string) (domain
 
 // ListProjects returns all projects sorted by name.
 func (u *Unlocked) ListProjects(ctx context.Context) ([]domain.Project, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return nil, lerr
+	}
+	defer done()
 	ps, err := listRecords[domain.Project](ctx, u.store, u.c, u.key, KindProject, "")
 	if err != nil {
 		return nil, err
@@ -44,6 +54,11 @@ func (u *Unlocked) ListProjects(ctx context.Context) ([]domain.Project, error) {
 }
 
 func (u *Unlocked) RenameProject(ctx context.Context, id domain.ID[domain.Project], newName string) error {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return lerr
+	}
+	defer done()
 	if err := validName(newName); err != nil {
 		return err
 	}
@@ -63,6 +78,11 @@ func (u *Unlocked) RenameProject(ctx context.Context, id domain.ID[domain.Projec
 // DeleteProject deletes the project with its environments, env keys and
 // secrets.
 func (u *Unlocked) DeleteProject(ctx context.Context, id domain.ID[domain.Project]) error {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return lerr
+	}
+	defer done()
 	return u.store.Tx(ctx, func(tx RecordStore) error {
 		if _, err := getRecord[domain.Project](ctx, tx, u.c, u.key, KindProject, string(id)); err != nil {
 			return err
@@ -83,6 +103,11 @@ func (u *Unlocked) DeleteProject(ctx context.Context, id domain.ID[domain.Projec
 // DuplicateProject copies a project, its environments (with NEW env keys)
 // and their secrets (re-sealed, new ids) under newName.
 func (u *Unlocked) DuplicateProject(ctx context.Context, id domain.ID[domain.Project], newName string) (domain.Project, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return domain.Project{}, lerr
+	}
+	defer done()
 	if err := validName(newName); err != nil {
 		return domain.Project{}, err
 	}

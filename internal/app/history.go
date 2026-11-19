@@ -67,6 +67,11 @@ func (u *Unlocked) recordHistoryTx(ctx context.Context, tx RecordStore, envKey d
 
 // History returns the environment's events, newest first, without values.
 func (u *Unlocked) History(ctx context.Context, envID domain.ID[domain.Environment]) ([]HistoryEntry, error) {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return nil, lerr
+	}
+	defer done()
 	key, err := u.envKey(ctx, u.store, envID)
 	if err != nil {
 		return nil, err
@@ -94,6 +99,11 @@ func (u *Unlocked) History(ctx context.Context, envID domain.ID[domain.Environme
 // secret.delete entry, after re-verifying the vault password. The restore is
 // itself recorded as a normal event.
 func (u *Unlocked) RestoreVersion(ctx context.Context, entryID string, password []byte) error {
+	done, lerr := u.enter()
+	if lerr != nil {
+		return lerr
+	}
+	defer done()
 	meta, err := u.store.Meta(ctx)
 	if err != nil {
 		return err
