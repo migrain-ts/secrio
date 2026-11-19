@@ -37,6 +37,11 @@ func NewRoot(d Deps) *cobra.Command {
 	addContextFlags(root, &flags)
 
 	// Subcommands: one constructor call per line, appended by later tasks.
+	root.AddCommand(
+		newVaultCmd(d, &flags),
+		newUnlockCmd(d, &flags),
+		newLockCmd(d, &flags),
+	)
 
 	finalize(root)
 	return root
