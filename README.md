@@ -63,12 +63,14 @@ Each of `vault`, `project`, `env` is resolved separately. Priority: flags, then 
 
 ## Exit codes
 
+The table applies to every command except `run`.
+
 | Code | Meaning |
 |---|---|
 | 0 | Success |
 | 1 | Error |
-| 2 | Usage error |
-| 3 | Vault locked, wrong password, or no password available without a terminal |
+| 2 | Usage error (not under `run`, see below) |
+| 3 | Vault locked, wrong password, or no password available without a terminal (not under `run`, see below) |
 
 Under `run`, secrio's own failures before the command starts (including a locked vault, a wrong password, a missing vault/project/env context and a missing `--` or command) exit 125, not 3 or 2, so they cannot be mistaken for the child's own exit code. The one exception: a flag-parse error or an unknown command at the root (for example `run --nosuch -- true`) is still a usage error, exit 2. Otherwise `run` returns the child's own exit code; 125 if secrio failed before starting the command; 126 if it could not be executed; 127 if it was not found; 128+N if it was killed by signal N.
 
