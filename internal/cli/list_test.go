@@ -43,8 +43,12 @@ func TestListEmptyVault(t *testing.T) {
 	}
 }
 
+// The usage check must come before the vault is opened: with a locked vault
+// the answer is still exit 2, not 3.
 func TestListEnvWithoutProject(t *testing.T) {
 	e := unlockedEnv(t)
+	seedLeak(t, e)
+	e.run(nil, "lock", "work")
 	if code := e.run(nil, "--vault", "work", "--env", "dev", "list"); code != ExitUsage || !strings.Contains(e.err.String(), "--project") {
 		t.Fatalf("code=%d err=%q", code, e.err)
 	}
@@ -52,6 +56,7 @@ func TestListEnvWithoutProject(t *testing.T) {
 
 func TestListUnknownNames(t *testing.T) {
 	e := unlockedEnv(t)
+	seedLeak(t, e)
 	e.run(nil, "--vault", "work", "project", "create", "a")
 	if code := e.run(nil, "--vault", "work", "--project", "nope", "list"); code != ExitFailure || !strings.Contains(e.err.String(), `unknown project "nope"`) {
 		t.Fatalf("code=%d err=%q", code, e.err)
@@ -63,13 +68,14 @@ func TestListUnknownNames(t *testing.T) {
 
 func TestListLockedAndEnvPassword(t *testing.T) {
 	e := unlockedEnv(t)
+	seedLeak(t, e)
 	e.run(nil, "--vault", "work", "project", "create", "a")
 	e.run(nil, "lock", "work")
 	if code := e.run(nil, "--vault", "work", "list"); code != ExitLocked {
 		t.Fatalf("code=%d err=%q", code, e.err)
 	}
 	e.vars["SECRIO_PASSWORD"] = testPassword
-	if code := e.run(nil, "--vault", "work", "list"); code != ExitOK || e.out.String() != "a\n" {
+	if code := e.run(nil, "--vault", "work", "list"); code != ExitOK || e.out.String() != "a\nleakp\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, e.out, e.err)
 	}
 	if !isLocked(t, e, "work") {

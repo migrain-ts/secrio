@@ -247,3 +247,37 @@ func TestExecutePrintsUnlessTopLevelCodeOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestArgsAfterDashDashAreNotFlags(t *testing.T) {
+	var got []string
+	c := &cobra.Command{Use: "dummy", Args: cobra.ArbitraryArgs, RunE: func(_ *cobra.Command, args []string) error {
+		got = args
+		return nil
+	}}
+	if code, _, errb := runWith(t, []string{"dummy", "--", "--foo", "-x", "--vault=v"}, c); code != ExitOK || errb != "" {
+		t.Fatalf("code=%d stderr=%q", code, errb)
+	}
+	if strings.Join(got, "|") != "--foo|-x|--vault=v" {
+		t.Fatalf("args=%q", got)
+	}
+}
+
+func TestExitErrorCodeBeatsWrappedSentinel(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"exit error over ErrLocked", &ExitError{Code: 125, Err: domain.ErrLocked}, 125},
+		{"exit error over ErrInvalidArgument", &ExitError{Code: ExitFailure, Err: domain.ErrInvalidArgument}, ExitFailure},
+		{"wrapped exit error over sentinel", fmt.Errorf("w: %w", &ExitError{Code: 9, Err: domain.ErrInvalidPassword}), 9},
+		{"join sentinel first", errors.Join(domain.ErrLocked, &ExitError{Code: 9}), 9},
+		{"join exit error first", errors.Join(&ExitError{Code: 9}, domain.ErrLocked), 9},
+		{"join of sentinels, locked first", errors.Join(domain.ErrLocked, domain.ErrInvalidArgument), ExitLocked},
+	}
+	for _, c := range cases {
+		if got := exitCode(c.err); got != c.want {
+			t.Errorf("%s: code=%d want %d", c.name, got, c.want)
+		}
+	}
+}

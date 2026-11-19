@@ -29,19 +29,30 @@ func runMain(m *testing.M) int {
 		return 1
 	}
 	defer os.RemoveAll(tmp)
-	_, file, _, _ := runtime.Caller(0)
 	secrioBin = filepath.Join(tmp, "secrio")
 	if runtime.GOOS == "windows" {
 		secrioBin += ".exe"
 	}
 	build := exec.Command("go", "build", "-o", secrioBin, "./cmd/secrio")
-	build.Dir = filepath.Dir(filepath.Dir(file)) // module root
+	build.Dir = moduleRoot()
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "building secrio: %v\n%s", err, out)
 		return 1
 	}
 	return m.Run()
+}
+
+// moduleRoot is the directory holding go.mod: from `go env GOMOD`, else two
+// levels above this file.
+func moduleRoot() string {
+	if out, err := exec.Command("go", "env", "GOMOD").Output(); err == nil {
+		if mod := strings.TrimSpace(string(out)); mod != "" && mod != os.DevNull && mod != "NUL" {
+			return filepath.Dir(mod)
+		}
+	}
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Dir(filepath.Dir(file))
 }
 
 const (
@@ -73,11 +84,19 @@ func (s *sandbox) exec(stdin string, extra []string, args ...string) result {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, secrioBin, args...)
 	cmd.Dir = s.dir
+	cmd.WaitDelay = 5 * time.Second // never hang on a pipe held open by an orphan
+	home := s.t.TempDir()
 	env := map[string]string{
 		"SECRIO_HOME":     s.home,
 		"SECRIO_PASSWORD": binPw,
-		"HOME":            s.t.TempDir(),
+		"HOME":            home,
 		"PATH":            os.Getenv("PATH"),
+	}
+	if runtime.GOOS == "windows" {
+		env["USERPROFILE"] = home
+	}
+	if tmp := os.Getenv("TMPDIR"); tmp != "" {
+		env["TMPDIR"] = tmp
 	}
 	for _, kv := range extra {
 		k, v, _ := strings.Cut(kv, "=")
@@ -356,11 +375,46 @@ func TestCLIErrorsNeverContainPassword(t *testing.T) {
 		if r.code == 0 {
 			t.Fatalf("secrio %v unexpectedly succeeded", c.args)
 		}
+		if r.err == "" {
+			t.Fatalf("secrio %v failed (exit %d) without a message on stderr", c.args, r.code)
+		}
 		all := r.out + r.err
 		for _, secret := range []string{binPw, dbURL, wrong} {
 			if strings.Contains(all, secret) {
 				t.Fatalf("secrio %v leaked a secret: %q", c.args, all)
 			}
+		}
+	}
+}
+
+// The successful flows must not print the password anywhere, nor the secret
+// value anywhere except where it is the point (get and a child that echoes it).
+func TestCLISuccessOutputNeverLeaks(t *testing.T) {
+	skipNoSh(t)
+	s := newSandbox(t)
+	flows := []struct {
+		name      string
+		stdin     string
+		args      []string
+		mayPrintV bool // stdout may hold the secret value
+	}{
+		{"vault create", "", []string{"vault", "create", "work"}, false},
+		{"project create", "", []string{"project", "create", "hotenb", "--vault", "work"}, false},
+		{"env create", "", []string{"env", "create", "production", "--vault", "work", "--project", "hotenb"}, false},
+		{"set", dbURL, args([]string{"set", "DATABASE_URL"}, flagsWHP), false},
+		{"vault list", "", []string{"vault", "list"}, false},
+		{"list projects", "", []string{"list", "--vault", "work"}, false},
+		{"list secrets", "", args([]string{"list"}, flagsWHP), false},
+		{"get", "", args([]string{"get", "DATABASE_URL"}, flagsWHP), true},
+		{"run", "", args([]string{"run"}, flagsWHP, []string{"--", "sh", "-c", `printf %s "$DATABASE_URL"; env`}), true},
+	}
+	for _, f := range flows {
+		r := s.must(f.stdin, f.args...)
+		if strings.Contains(r.out+r.err, binPw) {
+			t.Errorf("%s: password printed: %q %q", f.name, r.out, r.err)
+		}
+		if strings.Contains(r.err, dbURL) || (!f.mayPrintV && strings.Contains(r.out, dbURL)) {
+			t.Errorf("%s: secret value printed: %q %q", f.name, r.out, r.err)
 		}
 	}
 }

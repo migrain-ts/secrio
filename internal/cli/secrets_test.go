@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -237,6 +238,43 @@ func TestSecretsLockedAndEnvPassword(t *testing.T) {
 	}
 }
 
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, errors.New("disk on fire") }
+
+func TestGetWriteFailure(t *testing.T) {
+	const v = "TOPSECRET-value-123"
+	e := secretsEnv(t)
+	e.secret([]byte(v), "set", "K")
+	e.d.Out = failWriter{}
+	e.d.StdoutTTY = func() bool { return true }
+	if code := e.secret(nil, "get", "K"); code != ExitFailure || e.err.String() != "secrio: disk on fire\n" {
+		t.Fatalf("code=%d err=%q", code, e.err)
+	}
+}
+
+func TestGetRawBytesPassThrough(t *testing.T) {
+	e := secretsEnv(t)
+	// The Core accepts NUL and non-UTF-8 bytes; `get` must hand them over untouched.
+	for _, v := range []string{"a\x00b", "\x00", "x\xff\xfe\r\ny\n"} {
+		seedSecret(t, e, "a", "dev", "RAW", v)
+		if code := e.secret(nil, "get", "RAW"); code != ExitOK || e.out.String() != v || e.err.Len() != 0 {
+			t.Errorf("%q: code=%d out=%q err=%q", v, code, e.out, e.err)
+		}
+	}
+}
+
+func TestSetRejectsOversizedWithCRLF(t *testing.T) {
+	e := secretsEnv(t)
+	in := []byte(strings.Repeat("A", 1<<20+1) + "\r\n")
+	if code := e.secret(in, "set", "K"); code != ExitFailure || !strings.Contains(e.err.String(), "value too large (max 1 MiB)") {
+		t.Fatalf("code=%d err=%.200q", code, e.err)
+	}
+	if code := e.secret(nil, "get", "K"); code != ExitFailure {
+		t.Fatalf("something was stored (get code=%d)", code)
+	}
+}
+
 func TestNoValueLeak(t *testing.T) {
 	const v = "TOPSECRET-value-123"
 	e := secretsEnv(t)
@@ -246,6 +284,29 @@ func TestNoValueLeak(t *testing.T) {
 			t.Errorf("%s: value leaked: out=%q err=%q", label, e.out, e.err)
 		}
 	}
+	// Happy paths first, so the value exists while the error paths run: set
+	// prints only its confirmation, get only the raw value, stderr stays empty.
+	if code := e.secret([]byte(v+"\n"), "set", "K"); code != ExitOK || e.out.String() != "set K\n" || e.err.Len() != 0 {
+		t.Fatalf("set: code=%d out=%q err=%q", code, e.out, e.err)
+	}
+	check("set")
+	if code := e.secret(nil, "get", "K"); code != ExitOK || e.out.String() != v || e.err.Len() != 0 {
+		t.Fatalf("get: code=%d out=%q err=%q", code, e.out, e.err)
+	}
+	e.tty = true // prompt path for set, terminal newline for get
+	e.d.StdoutTTY = func() bool { return true }
+	if code := e.run([]string{v}, withCtx("set", "K2")...); code != ExitOK || e.out.String() != "set K2\n" || e.err.Len() != 0 {
+		t.Fatalf("tty set: code=%d out=%q err=%q", code, e.out, e.err)
+	}
+	check("tty set")
+	if code := e.run(nil, withCtx("get", "K2")...); code != ExitOK || e.out.String() != v+"\n" || e.err.Len() != 0 {
+		t.Fatalf("tty get: code=%d out=%q err=%q", code, e.out, e.err)
+	}
+	e.tty = false
+	e.d.StdoutTTY = func() bool { return false }
+	// Not covered: a SetSecret failure after the vault is open. No Core input
+	// makes it fail without a fault-injecting fake, and Deps cannot inject one.
+
 	e.secret([]byte(v), "set", "1BAD")
 	check("invalid name")
 	e.secret([]byte(v), "set", "A", "B")

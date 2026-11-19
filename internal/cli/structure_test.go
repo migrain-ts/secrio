@@ -31,6 +31,7 @@ func TestProjectAndEnvCreate(t *testing.T) {
 
 func TestProjectCreateDuplicate(t *testing.T) {
 	e := unlockedEnv(t)
+	seedLeak(t, e)
 	e.run(nil, "--vault", "work", "project", "create", "api")
 	if code := e.run(nil, "--vault", "work", "project", "create", "api"); code != ExitFailure || e.out.Len() != 0 {
 		t.Fatalf("code=%d out=%q err=%q", code, e.out, e.err)
@@ -42,6 +43,7 @@ func TestProjectCreateDuplicate(t *testing.T) {
 
 func TestEnvCreateDuplicate(t *testing.T) {
 	e := unlockedEnv(t)
+	seedLeak(t, e)
 	e.run(nil, "--vault", "work", "project", "create", "api")
 	e.run(nil, "--vault", "work", "--project", "api", "env", "create", "dev")
 	if code := e.run(nil, "--vault", "work", "--project", "api", "env", "create", "dev"); code != ExitFailure {
@@ -54,6 +56,7 @@ func TestEnvCreateDuplicate(t *testing.T) {
 
 func TestEnvCreateNeedsProject(t *testing.T) {
 	e := unlockedEnv(t)
+	seedLeak(t, e)
 	if code := e.run(nil, "--vault", "work", "env", "create", "dev"); code != ExitUsage || !strings.Contains(e.err.String(), "project") {
 		t.Fatalf("code=%d err=%q", code, e.err)
 	}
@@ -61,6 +64,7 @@ func TestEnvCreateNeedsProject(t *testing.T) {
 
 func TestEnvCreateUnknownProject(t *testing.T) {
 	e := unlockedEnv(t)
+	seedLeak(t, e)
 	if code := e.run(nil, "--vault", "work", "--project", "nope", "env", "create", "dev"); code != ExitFailure || !strings.Contains(e.err.String(), `unknown project "nope"`) {
 		t.Fatalf("code=%d err=%q", code, e.err)
 	}
@@ -100,6 +104,19 @@ func TestStructureEnvPasswordKeepsLocked(t *testing.T) {
 	if !isLocked(t, e, "work") {
 		t.Fatal("vault left unlocked")
 	}
+}
+
+// leakValue is a recognizable secret planted by seedLeak; after seedLeak,
+// env.run fails the test if any command output contains it.
+const leakValue = "LEAK-VALUE-do-not-print-7f3a"
+
+// seedLeak adds project leakp / env leake holding leakValue.
+func seedLeak(t *testing.T, e *env) {
+	t.Helper()
+	e.run(nil, "--vault", "work", "project", "create", "leakp")
+	e.run(nil, "--vault", "work", "--project", "leakp", "env", "create", "leake")
+	seedSecret(t, e, "leakp", "leake", "LEAKY", leakValue)
+	e.watchLeak = true
 }
 
 // seedSecret sets a secret through the Core.

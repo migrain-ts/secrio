@@ -8,26 +8,29 @@ import (
 	"testing"
 
 	"secrio/internal/app"
+	"secrio/internal/infra/clock"
 )
 
 // env is a scripted CLI environment over a real Core.
 type env struct {
-	t        *testing.T
-	svc      *app.Service
-	dir      string
-	d        Deps
-	out, err *bytes.Buffer
-	vars     map[string]string
-	tty      bool
-	prompts  []string
-	pwQueue  []string
-	pwCalls  int
+	t         *testing.T
+	svc       *app.Service
+	clock     *clock.Fake
+	dir       string
+	d         Deps
+	out, err  *bytes.Buffer
+	vars      map[string]string
+	tty       bool
+	prompts   []string
+	pwQueue   []string
+	pwCalls   int
+	watchLeak bool // see seedLeak
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	svc, dir, _ := newTestCore(t)
-	e := &env{t: t, svc: svc, dir: dir, out: &bytes.Buffer{}, err: &bytes.Buffer{}, vars: map[string]string{}, tty: true}
+	svc, dir, fake := newTestCore(t)
+	e := &env{t: t, svc: svc, clock: fake, dir: dir, out: &bytes.Buffer{}, err: &bytes.Buffer{}, vars: map[string]string{}, tty: true}
 	e.d = Deps{
 		In:       strings.NewReader(""),
 		Out:      e.out,
@@ -55,7 +58,11 @@ func (e *env) run(pws []string, args ...string) int {
 	e.out.Reset()
 	e.err.Reset()
 	e.pwQueue = pws
-	return Execute(e.d, args)
+	code := Execute(e.d, args)
+	if e.watchLeak && strings.Contains(e.out.String()+e.err.String(), leakValue) {
+		e.t.Errorf("%v: value leaked: out=%q err=%q", args, e.out, e.err)
+	}
+	return code
 }
 
 func (e *env) lookup(name string) app.VaultEntry {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"secrio/internal/domain"
 )
@@ -198,5 +199,43 @@ func TestLockFailureMessage(t *testing.T) {
 	code := e.run(nil, "lock", "work")
 	if code != ExitFailure || !strings.Contains(e.err.String(), "may still be unlocked") || strings.Contains(e.out.String(), "locked") {
 		t.Fatalf("code=%d out=%q err=%q", code, e.out, e.err)
+	}
+}
+
+func TestUnlockWrongPasswordMessageIsGeneric(t *testing.T) {
+	e := newEnv(t)
+	mkVault(t, e, "work")
+	const pw = "wrong-pw-MARKER-91"
+	if code := e.run([]string{pw}, "unlock", "work"); code != ExitLocked || e.err.String() != "secrio: invalid password\n" || e.out.Len() != 0 {
+		t.Fatalf("prompt: code=%d out=%q err=%q", code, e.out, e.err)
+	}
+	e.vars["SECRIO_PASSWORD"] = pw
+	if code := e.run(nil, "unlock", "work"); code != ExitLocked || e.err.String() != "secrio: invalid password (from SECRIO_PASSWORD)\n" || e.out.Len() != 0 {
+		t.Fatalf("env: code=%d out=%q err=%q", code, e.out, e.err)
+	}
+	if strings.Contains(e.out.String()+e.err.String(), pw) {
+		t.Fatal("password printed")
+	}
+}
+
+func TestUnlockAlreadyUnlockedReplacesSession(t *testing.T) {
+	e := newEnv(t)
+	mkVault(t, e, "work")
+	if code := e.run([]string{testPassword}, "unlock", "work", "--ttl", "1h", "--idle", "0"); code != ExitOK {
+		t.Fatalf("first: code=%d err=%q", code, e.err)
+	}
+	if code := e.run([]string{testPassword}, "unlock", "work", "--ttl", "5h", "--idle", "0"); code != ExitOK || e.out.String() != "unlocked work (expires in 5h0m0s)\n" {
+		t.Fatalf("second: code=%d out=%q err=%q", code, e.out, e.err)
+	}
+	e.clock.Advance(2 * time.Hour) // past the first session's TTL, inside the second's
+	if code := e.run(nil, "--vault", "work", "project", "create", "p"); code != ExitOK {
+		t.Fatalf("session not replaced: code=%d err=%q", code, e.err)
+	}
+	// A wrong password on an already unlocked vault fails and leaves the session alone.
+	if code := e.run([]string{"wrong"}, "unlock", "work"); code != ExitLocked {
+		t.Fatalf("wrong: code=%d", code)
+	}
+	if code := e.run(nil, "--vault", "work", "list"); code != ExitOK || e.out.String() != "p\n" {
+		t.Fatalf("after wrong: code=%d out=%q err=%q", code, e.out, e.err)
 	}
 }
