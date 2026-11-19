@@ -40,7 +40,7 @@ func newVaultCreateCmd(d Deps) *cobra.Command {
 				case e.Name == name:
 					return fmt.Errorf("vault %q already exists", name)
 				case strings.EqualFold(e.Name, name):
-					return fmt.Errorf("vault %q already exists (names are case-insensitive on this system)", name)
+					return fmt.Errorf("vault %q already exists as %q (vault names are compared without regard to case)", name, e.Name)
 				}
 			}
 			dir, err := d.DataDir()

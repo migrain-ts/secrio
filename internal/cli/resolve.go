@@ -14,11 +14,11 @@ var vaultNameRE = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
 // validVaultName checks a vault name against the CLI naming rule.
 func validVaultName(name string) error {
-	// Names that match the pattern but are path components (".", ".."), hidden
-	// or contain "..", or are Windows device names (also with an extension).
-	if !vaultNameRE.MatchString(name) || strings.HasPrefix(name, ".") ||
+	// Names that match the pattern but are path components (".", ".."), hidden,
+	// start with "-" (would read as a flag) or contain "..", or are Windows device names (also with an extension).
+	if !vaultNameRE.MatchString(name) || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "-") ||
 		strings.Contains(name, "..") || windowsReserved(name) {
-		return fmt.Errorf("invalid vault name %q: use letters, digits, '.', '_' or '-' (max 64)", name)
+		return fmt.Errorf("invalid vault name %q: use letters, digits, '.', '_' or '-' (max 64), not starting with '-' or '.'", name)
 	}
 	return nil
 }

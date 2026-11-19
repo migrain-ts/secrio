@@ -92,7 +92,7 @@ func TestVaultCreateDuplicateBeforePrompt(t *testing.T) {
 	mkVault(t, e, "Work")
 	for name, want := range map[string]string{
 		"Work": "secrio: vault \"Work\" already exists\n",
-		"work": "secrio: vault \"work\" already exists (names are case-insensitive on this system)\n",
+		"work": "secrio: vault \"work\" already exists as \"Work\" (vault names are compared without regard to case)\n",
 	} {
 		e.err.Reset()
 		if code := e.run([]string{"pw", "pw"}, "vault", "create", name); code != ExitFailure || e.err.String() != want {

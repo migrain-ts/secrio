@@ -11,7 +11,7 @@ import (
 )
 
 func TestValidVaultName(t *testing.T) {
-	for _, ok := range []string{"work", "a.b-c_d", "A1", strings.Repeat("a", 64)} {
+	for _, ok := range []string{"work", "a.b-c_d", "A1", "a-b", "x-", strings.Repeat("a", 64)} {
 		if err := validVaultName(ok); err != nil {
 			t.Errorf("%q rejected: %v", ok, err)
 		}
@@ -22,7 +22,7 @@ func TestValidVaultName(t *testing.T) {
 		}
 	}
 	bads := []string{"", "a/b", "..", "a b", strings.Repeat("a", 65), "é", "a\nb",
-		"a\n", "a٣", "١٢", "a..b", ".hidden", ".", "...",
+		"a\n", "-x", "--v", "-", "a٣", "١٢", "a..b", ".hidden", ".", "...",
 		"con", "CON", "Prn", "aux", "NUL", "com1", "COM9", "lpt1", "Lpt9",
 		"con.txt", "NUL.db", "com3.x.y", "con."}
 	dir := t.TempDir()

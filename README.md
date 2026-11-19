@@ -35,7 +35,7 @@ printf %s "$DB_URL" | SECRIO_PASSWORD=... secrio set DATABASE_URL
 
 | Command | What it does |
 |---|---|
-| `vault create <name>` | Create a vault (name: letters, digits, `.`, `_`, `-`, max 64; not starting with `.`, not containing `..`, not a reserved Windows name such as `con` or `com1`) |
+| `vault create <name>` | Create a vault (name: letters, digits, `.`, `_`, `-`, max 64; not starting with `.` or `-`, not containing `..`, not a reserved Windows name such as `con` or `com1`) |
 | `vault list` | List vault names |
 | `unlock [vault]` | Start a session (`--ttl` max lifetime, default 12h, must be positive; `--idle` idle timeout, default 1h, `--idle 0` disables it) |
 | `lock [vault]` | End the session |
@@ -88,5 +88,5 @@ No import, export, edit or delete command yet, and no desktop app. `unlock` need
 - Two concurrent `vault create` runs can leave an orphaned vault file: the registry is last-writer-wins across processes.
 - A project or environment provided by `.secrio.toml` cannot be cleared from the command line: an empty `--project ""` counts as unset and the file's value applies.
 - Vault, project and environment names cannot contain control characters (newline, ESC, ...).
-- Vault names are case-insensitive on macOS and Windows file systems, so `vault create` refuses a name that differs from an existing one only by case; reserved Windows names (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`, also with an extension) and `..` inside a name are refused everywhere.
+- Vault names that differ only by case are refused on every OS, because macOS and Windows file systems would make their files collide, so `vault create` refuses a name that differs from an existing one only by case; reserved Windows names (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`, also with an extension) and `..` inside a name are refused everywhere.
 - `SECRIO_PASSWORD` exported in a shell profile costs one Argon2id run (about a second and 256 MiB of memory) for every command that has no session.
