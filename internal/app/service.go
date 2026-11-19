@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"secrio/internal/domain"
 )
@@ -35,10 +36,14 @@ func NewService(c Cipher, kdf KDF, p domain.KDFParams, opener VaultOpener, reg R
 // closeInto closes st and joins any close error into *err.
 func closeInto(err *error, st RecordStore) { *err = errors.Join(*err, st.Close()) }
 
-// validName rejects blank display names (projects, environments, vaults).
+// validName rejects blank display names and names with control characters
+// (newline, ESC, ...) for projects, environments and vaults.
 func validName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("%w: empty", domain.ErrInvalidName)
+	}
+	if strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return fmt.Errorf("%w: control characters are not allowed", domain.ErrInvalidName)
 	}
 	return nil
 }
