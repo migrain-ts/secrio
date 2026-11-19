@@ -59,7 +59,7 @@ project = "hotenb"
 env = "production"
 ```
 
-Each of `vault`, `project`, `env` is resolved separately. Priority: flags, then `SECRIO_VAULT` / `SECRIO_PROJECT` / `SECRIO_ENV`, then the nearest `.secrio.toml`, searched from the current directory upwards. Unknown keys are an error. The data directory is `SECRIO_HOME` if set, otherwise the platform default.
+Each of `vault`, `project`, `env` is resolved separately. Priority: flags, then `SECRIO_VAULT` / `SECRIO_PROJECT` / `SECRIO_ENV`, then the nearest `.secrio.toml`, searched from the current directory upwards. Unknown keys are an error. On Unix, a `.secrio.toml` owned by another user (and not run as root) is refused, since someone else could steer which vault a command uses; a directory with that name is ignored. The data directory is `SECRIO_HOME` if set, otherwise the platform default.
 
 ## Exit codes
 

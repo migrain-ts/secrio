@@ -64,8 +64,25 @@ func first(vals ...string) string {
 	return ""
 }
 
-// findContextFile returns the nearest .secrio.toml in the working directory
-// or above; the first one found wins. No file yields the zero value.
+// Replaced by tests to simulate another owner or root.
+var (
+	fileOwnerUID = ownerUID
+	effectiveUID = os.Geteuid
+)
+
+// checkOwner refuses a context file owned by another user (unless running as
+// root): someone else could otherwise steer which vault or environment a
+// command uses. Where the owner is unknown (Windows) nothing is checked.
+func checkOwner(path string, fi os.FileInfo) error {
+	uid, ok := fileOwnerUID(fi)
+	if !ok || effectiveUID() == 0 || int64(uid) == int64(effectiveUID()) {
+		return nil
+	}
+	return fmt.Errorf("refusing to use %s: owned by another user (pass --vault/--project/--env or SECRIO_* variables instead, or fix the ownership)", path)
+}
+
+// findContextFile returns the nearest .secrio.toml file (a directory of that
+// name is skipped) in the working directory or above; the first one found wins. No file yields the zero value.
 func findContextFile(d Deps) (fileContext, error) {
 	dir, err := d.Getwd()
 	if err != nil {
@@ -73,12 +90,21 @@ func findContextFile(d Deps) (fileContext, error) {
 	}
 	for {
 		path := filepath.Join(dir, contextFile)
-		data, err := os.ReadFile(path)
-		if err == nil {
+		fi, err := os.Stat(path)
+		switch {
+		case err == nil && fi.IsDir():
+			// A directory named .secrio.toml is not a context file: keep looking.
+		case err == nil:
+			if err := checkOwner(path, fi); err != nil {
+				return fileContext{}, err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fileContext{}, err // *PathError names the path, no content
+			}
 			return parseContextFile(path, data)
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return fileContext{}, err // *PathError names the path, no content
+		case !errors.Is(err, os.ErrNotExist):
+			return fileContext{}, err // *PathError names the path
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
