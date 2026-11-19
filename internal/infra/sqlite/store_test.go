@@ -163,6 +163,23 @@ func TestTxRollbackOnError(t *testing.T) {
 	}
 }
 
+func TestTxStoreCloseKeepsPoolOpen(t *testing.T) {
+	ctx := context.Background()
+	s, _ := newStore(t)
+	err := s.Tx(ctx, func(tx app.RecordStore) error {
+		if err := tx.Close(); err != nil {
+			return err
+		}
+		return tx.Put(ctx, rec("a", "p"))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Get(ctx, app.KindSecret, "a"); err != nil {
+		t.Fatalf("pool closed by tx-bound Close: %v", err)
+	}
+}
+
 func TestMigrationsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	s, path := newStore(t)

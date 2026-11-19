@@ -64,7 +64,11 @@ type RecordStore interface {
 	Get(ctx context.Context, kind Kind, id string) (Record, error)
 	List(ctx context.Context, kind Kind, parentID string) ([]Record, error)
 	Delete(ctx context.Context, kind Kind, id string) error
+	// Tx runs fn in one transaction. fn must use the store it is given.
 	Tx(ctx context.Context, fn func(RecordStore) error) error
+	// Close releases the store. On the store passed to a Tx callback it is a
+	// no-op.
+	Close() error
 }
 
 // --- Sessions ---

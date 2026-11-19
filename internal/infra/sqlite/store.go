@@ -35,8 +35,14 @@ type Store struct {
 
 var _ app.RecordStore = (*Store)(nil)
 
-// Close releases the underlying database handle.
-func (s *Store) Close() error { return s.db.Close() }
+// Close releases the underlying database handle. On the tx-bound store given
+// to a Tx callback it is a no-op: the pool belongs to the outer store.
+func (s *Store) Close() error {
+	if s.tx {
+		return nil
+	}
+	return s.db.Close()
+}
 
 func (s *Store) Meta(ctx context.Context) (app.VaultMeta, error) {
 	var m app.VaultMeta
