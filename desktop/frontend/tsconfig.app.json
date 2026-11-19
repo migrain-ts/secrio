@@ -23,7 +23,9 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
+    /* false: the generated wailsjs/go/models.ts (pulled in by the typed
+       bindings API.d.ts) uses a TypeScript namespace. */
+    "erasableSyntaxOnly": false,
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"]
