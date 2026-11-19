@@ -56,7 +56,25 @@ type VaultMeta struct {
 	CreatedAt       time.Time
 }
 
+// SessionRow is the single persisted session: an opaque sealed blob plus the
+// plaintext timing fields the store needs to enforce expiry atomically.
+// Idle == 0 means no idle limit.
+type SessionRow struct {
+	Blob                []byte
+	ExpiresAt, LastUsed time.Time
+	Idle                time.Duration
+}
+
 type RecordStore interface {
+	// PutSession upserts the single session row.
+	PutSession(ctx context.Context, r SessionRow) error
+	// GetSession returns domain.ErrLocked when there is no session row.
+	GetSession(ctx context.Context) (SessionRow, error)
+	// TouchSession sets last_used=now in one statement, only if the row exists,
+	// is unexpired at now and not idle-expired. It reports whether it did.
+	TouchSession(ctx context.Context, now time.Time) (bool, error)
+	// DeleteSession removes the session row. It is idempotent.
+	DeleteSession(ctx context.Context) error
 	Meta(ctx context.Context) (VaultMeta, error)
 	PutMeta(ctx context.Context, m VaultMeta) error
 	Put(ctx context.Context, r Record) error

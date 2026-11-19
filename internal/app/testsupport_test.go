@@ -94,6 +94,7 @@ type recKey struct {
 type fakeVault struct {
 	meta    *VaultMeta
 	records map[recKey]Record
+	session *SessionRow
 	puts    map[Kind]int // Put calls by kind
 	handles int          // open, not yet closed outer stores
 }
@@ -186,11 +187,58 @@ func (s *fakeStore) Tx(_ context.Context, fn func(RecordStore) error) error {
 	if s.tx {
 		return errors.New("fake store: nested transaction")
 	}
-	snapMeta, snapRecs := s.v.meta, maps.Clone(s.v.records)
+	snapMeta, snapRecs, snapSess := s.v.meta, maps.Clone(s.v.records), s.v.session
 	if err := fn(&fakeStore{v: s.v, tx: true}); err != nil {
-		s.v.meta, s.v.records = snapMeta, snapRecs
+		s.v.meta, s.v.records, s.v.session = snapMeta, snapRecs, snapSess
 		return err
 	}
+	return nil
+}
+
+func (s *fakeStore) PutSession(_ context.Context, r SessionRow) error {
+	if err := s.check(); err != nil {
+		return err
+	}
+	r.Blob = bytes.Clone(r.Blob)
+	if r.Idle > 0 && r.Idle < time.Millisecond {
+		r.Idle = time.Millisecond
+	}
+	s.v.session = &r
+	return nil
+}
+
+func (s *fakeStore) GetSession(context.Context) (SessionRow, error) {
+	if err := s.check(); err != nil {
+		return SessionRow{}, err
+	}
+	if s.v.session == nil {
+		return SessionRow{}, domain.ErrLocked
+	}
+	r := *s.v.session
+	r.Blob = bytes.Clone(r.Blob)
+	return r, nil
+}
+
+func (s *fakeStore) TouchSession(_ context.Context, now time.Time) (bool, error) {
+	if err := s.check(); err != nil {
+		return false, err
+	}
+	r := s.v.session
+	if r == nil || now.UnixMilli() >= r.ExpiresAt.UnixMilli() ||
+		(r.Idle != 0 && now.UnixMilli()-r.LastUsed.UnixMilli() >= r.Idle.Milliseconds()) {
+		return false, nil
+	}
+	u := *r // copy: Tx snapshot holds the old pointer
+	u.LastUsed = now
+	s.v.session = &u
+	return true, nil
+}
+
+func (s *fakeStore) DeleteSession(context.Context) error {
+	if err := s.check(); err != nil {
+		return err
+	}
+	s.v.session = nil
 	return nil
 }
 
