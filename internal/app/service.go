@@ -52,6 +52,9 @@ func (s *Service) CreateVault(ctx context.Context, name, path string, password [
 	if err := validName(name); err != nil {
 		return domain.Vault{}, err
 	}
+	if len(password) == 0 {
+		return domain.Vault{}, fmt.Errorf("%w: empty", domain.ErrInvalidPassword)
+	}
 	meta, vk, err := newVaultKeys(s.c, s.kdf, s.params, password)
 	if err != nil {
 		return domain.Vault{}, err
@@ -142,6 +145,9 @@ func (s *Service) Lock(ctx context.Context, vaultID string) error {
 // ChangePassword re-wraps the vault key under newPw. No data record is
 // rewritten and existing sessions stay valid.
 func (s *Service) ChangePassword(ctx context.Context, vaultID string, oldPw, newPw []byte) (err error) {
+	if len(newPw) == 0 {
+		return fmt.Errorf("%w: empty", domain.ErrInvalidPassword)
+	}
 	st, meta, err := s.openStore(ctx, vaultID)
 	if err != nil {
 		return err
