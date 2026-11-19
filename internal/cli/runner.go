@@ -50,8 +50,10 @@ func systemRunner(sigs <-chan os.Signal, interactive func() bool) RunFunc {
 		cmd := exec.Command(name, args...)
 		cmd.Env = env
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errw
-		// A non-file stdin that never closes (or an orphan holding stdout) must
-		// not keep Wait blocked after the child has exited.
+		// An orphan holding a copied stdout/stderr open must not keep Wait
+		// blocked. WaitDelay cannot interrupt a blocked io.Reader stdin; the
+		// real stdio are *os.File and are passed straight to the child (no
+		// copy goroutines).
 		cmd.WaitDelay = time.Second
 		if err := cmd.Start(); err != nil {
 			if errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {

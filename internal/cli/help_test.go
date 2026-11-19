@@ -14,8 +14,8 @@ func TestHelpKeyFacts(t *testing.T) {
 	}{
 		{[]string{"--help"}, []string{".secrio.toml", "searched upward", "SECRIO_HOME", "SECRIO_PASSWORD",
 			"SECRIO_VAULT", "SECRIO_PROJECT", "SECRIO_ENV", "flags, then", "125", "126", "127", "128+N", "Example"}},
-		{[]string{"run", "--help"}, []string{"125", "126", "127", "128+N", "SECRIO_PASSWORD", "SIGINT", "no terminal", "--", "Example"}},
-		{[]string{"set", "--help"}, []string{"masked prompt", "stdin", "1 MiB", "CRLF", "NUL", "empty", "Example"}},
+		{[]string{"run", "--help"}, []string{"125", "126", "127", "128+N", "SECRIO_PASSWORD", "SIGINT", "no terminal", "Put -- before", "flag-parse error", "Example"}},
+		{[]string{"set", "--help"}, []string{"masked prompt", "stdin", "1 MiB when read from stdin", "CRLF", "NUL", "empty", "Example"}},
 		{[]string{"get", "--help"}, []string{"raw", "terminal", "Example"}},
 		{[]string{"unlock", "--help"}, []string{"12h", "1h", "--idle 0", "Example"}},
 		{[]string{"list", "--help"}, []string{"projects", "environments", "secret names", "never values", "Example"}},

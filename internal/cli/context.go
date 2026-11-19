@@ -92,8 +92,9 @@ func findContextFile(d Deps) (fileContext, error) {
 		path := filepath.Join(dir, contextFile)
 		fi, err := os.Stat(path)
 		switch {
-		case err == nil && fi.IsDir():
-			// A directory named .secrio.toml is not a context file: keep looking.
+		case err == nil && !fi.Mode().IsRegular():
+			// A directory, FIFO, device or socket named .secrio.toml is not a
+			// context file (and reading it could block): keep looking.
 		case err == nil:
 			if err := checkOwner(path, fi); err != nil {
 				return fileContext{}, err

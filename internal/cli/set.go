@@ -99,7 +99,7 @@ func newSetCmd(d Deps, flags *Flags) *cobra.Command {
 The value is never an argument. On a terminal it comes from a masked prompt;
 otherwise it is read from stdin, and one trailing newline (or CRLF) is removed.
 An empty value and a value containing NUL bytes are refused, and the maximum is
-1 MiB. SECRIO_PASSWORD is not used as the value.`,
+1 MiB when read from stdin. SECRIO_PASSWORD is not used as the value.`,
 		Example: `  secrio set DATABASE_URL
   printf %s "$TOKEN" | secrio set API_TOKEN --vault work --project web --env production`,
 		Args: cobra.ExactArgs(1),

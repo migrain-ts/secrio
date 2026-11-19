@@ -56,9 +56,10 @@ Put -- before the command so its own flags are not read by secrio. The vault is
 closed before the command starts, and SECRIO_PASSWORD is removed from the
 command's environment.
 
-Exit code: the command's own code. Failures of secrio before the command starts
-(a locked vault, a wrong password, a missing context, a missing -- or command)
-exit 125, never 2 or 3, so they cannot be mistaken for the command's code. 126:
+Exit code: the command's own code. Failures of secrio itself before the command
+starts (a locked vault, a wrong password, a missing context, a missing -- or
+command) exit 125, so they cannot be mistaken for the command's code; the one
+exception is a flag-parse error, which exits 2. 126:
 the command could not be executed. 127: not found. 128+N: killed by signal N.
 
 SIGTERM is relayed to the command. SIGINT is relayed only when no terminal is
