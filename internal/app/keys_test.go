@@ -104,7 +104,12 @@ func TestUnwrapRejectsHostileKDFParams(t *testing.T) {
 		{"threads0", domain.KDFParams{Time: 1, MemoryKiB: 8, Threads: 0}, false},
 		{"mem0", domain.KDFParams{Time: 1, MemoryKiB: 0, Threads: 1}, false},
 		{"memTooBig", domain.KDFParams{Time: 1, MemoryKiB: 1<<20 + 1, Threads: 1}, false},
+		{"timeTooBig", domain.KDFParams{Time: 65, MemoryKiB: 8, Threads: 1}, false},
+		{"timeHuge", domain.KDFParams{Time: 4294967295, MemoryKiB: 8, Threads: 1}, false},
+		{"threadsTooBig", domain.KDFParams{Time: 1, MemoryKiB: 8, Threads: 65}, false},
 		{"valid", domain.KDFParams{Time: 1, MemoryKiB: 1 << 20, Threads: 1}, true},
+		{"defaults", domain.KDFParams{Time: 4, MemoryKiB: 256 * 1024, Threads: 4}, true},
+		{"upperBounds", domain.KDFParams{Time: 64, MemoryKiB: 1 << 20, Threads: 64}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

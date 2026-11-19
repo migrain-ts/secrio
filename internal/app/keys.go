@@ -10,6 +10,8 @@ import (
 const (
 	vaultKeyAAD = "vaultkey"
 
+	maxKDFTime      = 64 // caps against pre-auth CPU denial of service
+	maxKDFThreads   = 64
 	minKDFMemoryKiB = 8
 	maxKDFMemoryKiB = 1 << 20 // 1 GiB cap against hostile vault files
 )
@@ -19,7 +21,8 @@ func zeroKey(k *domain.Key) { *k = domain.Key{} }
 
 // validKDFParams reports whether p is within sane bounds.
 func validKDFParams(p domain.KDFParams) bool {
-	return p.Time >= 1 && p.Threads >= 1 &&
+	return p.Time >= 1 && p.Time <= maxKDFTime &&
+		p.Threads >= 1 && p.Threads <= maxKDFThreads &&
 		p.MemoryKiB >= minKDFMemoryKiB && p.MemoryKiB <= maxKDFMemoryKiB
 }
 
