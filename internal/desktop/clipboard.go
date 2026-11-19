@@ -87,9 +87,22 @@ func (a *App) CopySecret(envID, name string) (CopyResult, error) {
 		text := string(s.Value)
 		clear(s.Value)
 
+		if a.testHookBeforeClip != nil {
+			a.testHookBeforeClip()
+		}
 		c := &a.clip
 		c.mu.Lock()
 		defer c.mu.Unlock()
+		// Last step before the write: after Shutdown nobody would clear this
+		// copy, so refuse it. Lock order clip.mu -> App.mu is allowed because
+		// no code takes clip.mu while holding App.mu (Shutdown releases App.mu
+		// before clearOurClipboard).
+		a.mu.Lock()
+		closed := a.closed
+		a.mu.Unlock()
+		if closed {
+			return newAPIError(CodeLocked, "vault is locked")
+		}
 		if err := cb.SetText(text); err != nil {
 			return newAPIError(CodeInternal, "could not write the clipboard")
 		}

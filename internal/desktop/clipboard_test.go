@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -479,4 +480,45 @@ func TestConcurrentCopyAndLock(t *testing.T) {
 	}
 	wg.Wait()
 	c.app.Shutdown()
+}
+
+// assertCopyRefused checks a refused copy left the clipboard alone.
+func (c *clipEnv) assertCopyRefused(t *testing.T, err error) {
+	t.Helper()
+	if err == nil || codeOf(t, err) != CodeLocked {
+		t.Fatalf("got %v", err)
+	}
+	if c.clip.setCount() != 0 || c.clip.current() != "before" || c.timers.count() != 0 {
+		t.Fatalf("clipboard touched: sets=%d timers=%d", c.clip.setCount(), c.timers.count())
+	}
+}
+
+// Shutdown runs after the vault was read but before the clipboard write.
+func TestCopyRacingShutdownIsRefused(t *testing.T) {
+	c := newClipEnv(t)
+	c.app.testHookBeforeClip = func() {
+		c.app.testHookBeforeClip = nil
+		c.app.Shutdown()
+	}
+	_, err := c.app.CopySecret(c.envID, "A")
+	c.assertCopyRefused(t, err)
+}
+
+func TestCopyAfterShutdownIsRefused(t *testing.T) {
+	c := newClipEnv(t)
+	id := c.app.getCurrent()
+	c.app.Shutdown()
+	_, err := c.app.CopySecret(c.envID, "A")
+	c.assertCopyRefused(t, err)
+
+	// Even if another process unlocks the vault again, this App is closed.
+	other, err := c.otherService()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Unlock(context.Background(), id, []byte(testPassword), time.Hour, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.app.CopySecret(c.envID, "A")
+	c.assertCopyRefused(t, err)
 }

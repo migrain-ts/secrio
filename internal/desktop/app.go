@@ -26,6 +26,8 @@ type App struct {
 	closed   bool            // set by Shutdown
 
 	clip clipState // our last clipboard copy (hash only)
+
+	testHookBeforeClip func() // tests only: runs in CopySecret before clip.mu
 }
 
 // New builds an App. Missing NewService or DataDir is a programmer error.
