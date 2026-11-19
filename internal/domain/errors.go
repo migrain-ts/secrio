@@ -11,4 +11,5 @@ var (
 	ErrCorrupt           = errors.New("corrupt data")
 	ErrUnsupportedFormat = errors.New("unsupported format")
 	ErrAuthFailed        = errors.New("authentication failed")
+	ErrUnsupportedValue  = errors.New("unsupported secret value")
 )
