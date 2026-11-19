@@ -57,9 +57,11 @@ func (Opener) Open(ctx context.Context, path string) (app.RecordStore, error) {
 
 func dsn(path string) string {
 	q := url.Values{}
-	q.Add("_pragma", "journal_mode(WAL)")
+	// busy_timeout first so the journal_mode switch below also waits on locks.
 	q.Add("_pragma", "busy_timeout(5000)")
+	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "foreign_keys(1)")
+	q.Add("_pragma", "secure_delete(1)") // zero freed pages (not old WAL/backup copies)
 	// Write transactions take the write lock up front so that contention is
 	// absorbed by busy_timeout instead of failing mid-transaction.
 	q.Set("_txlock", "immediate")
