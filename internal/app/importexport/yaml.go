@@ -3,6 +3,7 @@ package importexport
 import (
 	"fmt"
 	"io"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 
@@ -53,12 +54,33 @@ func parseYAML(data []byte) ([]Entry, error) {
 	return c.out, nil
 }
 
+// yamlNeedsDoubleQuotes reports values the plain/block styles can corrupt:
+// control characters, line breaks and the Unicode line separators.
+func yamlNeedsDoubleQuotes(v string) bool {
+	for _, r := range v {
+		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
+			return true
+		}
+	}
+	return false
+}
+
 func writeYAML(w io.Writer, entries []Entry) error {
-	m, err := textMap(entries)
+	m, err := textMap(entries) // validates UTF-8
 	if err != nil {
 		return err
 	}
-	b, err := yaml.Marshal(m) // map[string]string: strings stay strings; keys sorted
+	root := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	for _, e := range entries { // already sorted by Write
+		v := m[string(e.Name)]
+		val := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v}
+		if yamlNeedsDoubleQuotes(v) {
+			val.Style = yaml.DoubleQuotedStyle
+		}
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: string(e.Name)}, val)
+	}
+	b, err := yaml.Marshal(root)
 	if err != nil {
 		return err
 	}

@@ -103,8 +103,9 @@ func TestApplyImportSkipVsOverwrite(t *testing.T) {
 				}
 			} else {
 				// NEW create + OLD update; SAME unchanged -> no event.
-				if string(get("OLD").Value) != "changed" || added != 2 {
-					t.Fatalf("overwrite wrong (added %d history)", added)
+				if o := get("OLD"); string(o.Value) != "changed" || added != 2 ||
+					o.Type != domain.TypePassword || o.Description != "desc" {
+					t.Fatalf("overwrite wrong (added %d history, type %s)", added, get("OLD").Type)
 				}
 				if after[0].Op != OpSecretUpdate && after[1].Op != OpSecretUpdate {
 					t.Fatal("no secret.update recorded")

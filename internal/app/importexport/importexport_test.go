@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
@@ -255,6 +256,42 @@ func TestWriteRejectsInvalidUTF8ForJSONYAML(t *testing.T) {
 		err := Write(f, &bytes.Buffer{}, in)
 		if !errors.Is(err, domain.ErrUnsupportedValue) {
 			t.Fatalf("%s: %v", f, err)
+		}
+	}
+}
+
+func TestRoundTripTrickyShapes(t *testing.T) {
+	in := entries("A", "\nabc", "B", "\n", "C", "\tx\ny", "D", "a\n\nb", "E", "\n\nabc", "F", " x\ny", "G", "x\n")
+	for _, f := range []Format{FormatDotenv, FormatJSON, FormatYAML} {
+		var buf bytes.Buffer
+		if err := Write(f, &buf, in); err != nil {
+			t.Fatal(err)
+		}
+		got, err := Parse(f, &buf)
+		if err != nil || !same(got, in) {
+			t.Fatalf("%s: round trip failed (err %v)", f, err)
+		}
+	}
+}
+
+func TestRoundTripProperty(t *testing.T) {
+	alphabet := []string{"a", "b", " ", "\t", "\n", "\r", `"`, "'", `\`, "#", ":", "-", "é", "\x00", "\x01", "\x0b", "\x7f", "$", "=", "\u0085", " "}
+	rng := rand.New(rand.NewSource(20260101))
+	for _, f := range []Format{FormatDotenv, FormatJSON, FormatYAML} {
+		for i := 0; i < 20000; i++ {
+			var sb strings.Builder
+			for n := rng.Intn(8); n > 0; n-- {
+				sb.WriteString(alphabet[rng.Intn(len(alphabet))])
+			}
+			in := entries("K", sb.String())
+			var buf bytes.Buffer
+			if err := Write(f, &buf, in); err != nil {
+				t.Fatalf("%s %q: write: %v", f, sb.String(), err)
+			}
+			got, err := Parse(f, &buf)
+			if err != nil || !same(got, in) {
+				t.Fatalf("%s %q: round trip failed (err %v)", f, sb.String(), err)
+			}
 		}
 	}
 }

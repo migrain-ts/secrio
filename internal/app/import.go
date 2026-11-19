@@ -80,10 +80,14 @@ func (u *Unlocked) ApplyImport(ctx context.Context, envID domain.ID[domain.Envir
 			return err
 		}
 		for _, e := range plan.entries {
-			if _, ok := findSecret(existing, e.Name); ok && s == StrategySkip {
-				continue
+			typ, desc := domain.TypeText, ""
+			if old, ok := findSecret(existing, e.Name); ok {
+				if s == StrategySkip {
+					continue
+				}
+				typ, desc = old.Type, old.Description // overwrite changes the value only
 			}
-			if _, err := u.setSecretTx(ctx, tx, key, envID, e.Name, e.Value, domain.TypeText, ""); err != nil {
+			if _, err := u.setSecretTx(ctx, tx, key, envID, e.Name, e.Value, typ, desc); err != nil {
 				return err
 			}
 		}
