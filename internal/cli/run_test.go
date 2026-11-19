@@ -351,3 +351,41 @@ func TestRunnerSkipsInterruptOnTerminal(t *testing.T) {
 		t.Fatalf("code=%d err=%v", r.code, r.err)
 	}
 }
+
+// A background grandchild keeps the (non-file) stdout copy open after the
+// child exited; WaitDelay must release the runner, with the child's code.
+// (WaitDelay cannot interrupt a Go io.Reader stuck in Read, such as an
+// io.Pipe stdin; the real stdin is an *os.File, which is handed to the child
+// directly, so no copy goroutine exists for it.)
+func TestRunnerOrphanHoldingStdoutDoesNotHang(t *testing.T) {
+	type result struct {
+		code int
+		err  error
+	}
+	done := make(chan result, 1)
+	start := time.Now()
+	go func() {
+		var out bytes.Buffer
+		code, err := systemRunner(nil, nil)(context.Background(), "sh", []string{"-c", "sleep 4 & exit 3"},
+			os.Environ(), strings.NewReader(""), &out, io.Discard)
+		done <- result{code, err}
+	}()
+	select {
+	case r := <-done:
+		if r.code != 3 || r.err != nil || time.Since(start) > 3*time.Second {
+			t.Fatalf("code=%d err=%v after %v", r.code, r.err, time.Since(start))
+		}
+	case <-time.After(3500 * time.Millisecond):
+		t.Fatal("runner waits for a grandchild that holds stdout")
+	}
+}
+
+func TestRunRunnerErrorWithCodeZeroIs125(t *testing.T) {
+	e := runEnv(t)
+	e.d.Run = func(context.Context, string, []string, []string, io.Reader, io.Writer, io.Writer) (int, error) {
+		return 0, errors.New("runner broke")
+	}
+	if code := e.runCmd("true"); code != ExitRunFailure || e.err.String() != "secrio: runner broke\n" {
+		t.Fatalf("code=%d err=%q", code, e.err)
+	}
+}

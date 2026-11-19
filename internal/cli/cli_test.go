@@ -227,3 +227,23 @@ func TestExecuteNilArgsIgnoresOSArgs(t *testing.T) {
 		t.Fatalf("code=%d", code)
 	}
 }
+
+func TestExecutePrintsUnlessTopLevelCodeOnly(t *testing.T) {
+	cases := []struct {
+		name    string
+		err     error
+		wantErr string
+	}{
+		{"code only is silent", &ExitError{Code: 7}, ""},
+		{"wrapped code only prints its context", fmt.Errorf("ctx: %w", &ExitError{Code: 7}), "secrio: ctx: exit status 7\n"},
+		{"exit error with cause prints", &ExitError{Code: 7, Err: errors.New("why")}, "secrio: why\n"},
+	}
+	for _, c := range cases {
+		d, _, errb := testDeps()
+		root := NewRoot(d)
+		root.AddCommand(&cobra.Command{Use: "boom", RunE: func(*cobra.Command, []string) error { return c.err }})
+		if code := run(d, root, []string{"boom"}); code != 7 || errb.String() != c.wantErr {
+			t.Errorf("%s: code=%d stderr=%q", c.name, code, errb.String())
+		}
+	}
+}

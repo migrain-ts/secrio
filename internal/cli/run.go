@@ -79,6 +79,9 @@ attached; on a terminal, Ctrl-C already reaches the command.`,
 				return &ExitError{Code: ExitRunFailure, Err: err}
 			}
 			code, err := d.Run(cmd.Context(), args[0], args[1:], env, d.In, d.Out, d.Err)
+			if err != nil && code == ExitOK {
+				code = ExitRunFailure // an error must never look like success
+			}
 			if err != nil || code != ExitOK {
 				return &ExitError{Code: code, Err: err} // Err nil: nothing printed
 			}

@@ -145,8 +145,9 @@ func run(d Deps, root *cobra.Command, args []string) int {
 	finalize(root)
 	root.SetArgs(args)
 	err := root.Execute()
-	var ee *ExitError
-	if err != nil && !(errors.As(err, &ee) && ee.Err == nil) { // Err nil: code only (run's child)
+	// A top-level ExitError without Err carries only a code (run's child):
+	// nothing to print. A wrapped one still prints its context.
+	if ee, ok := err.(*ExitError); err != nil && !(ok && ee.Err == nil) {
 		fmt.Fprintf(d.Err, "secrio: %s\n", err)
 	}
 	return exitCode(err)

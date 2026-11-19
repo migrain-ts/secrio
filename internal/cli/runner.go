@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 // Exit codes specific to `run` (besides the child's own code).
@@ -49,6 +50,9 @@ func systemRunner(sigs <-chan os.Signal, interactive func() bool) RunFunc {
 		cmd := exec.Command(name, args...)
 		cmd.Env = env
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errw
+		// A non-file stdin that never closes (or an orphan holding stdout) must
+		// not keep Wait blocked after the child has exited.
+		cmd.WaitDelay = time.Second
 		if err := cmd.Start(); err != nil {
 			if errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
 				return ExitNotFound, err
@@ -80,7 +84,8 @@ func systemRunner(sigs <-chan os.Signal, interactive func() bool) RunFunc {
 
 		var ee *exec.ExitError
 		switch {
-		case err == nil || errors.As(err, &ee):
+		case err == nil || errors.As(err, &ee) || errors.Is(err, exec.ErrWaitDelay):
+			// ErrWaitDelay: the child exited, only a copy of its stdio was cut off.
 			return statusCode(cmd.ProcessState), nil
 		case cmd.ProcessState != nil && statusCode(cmd.ProcessState) != 0:
 			return statusCode(cmd.ProcessState), err
