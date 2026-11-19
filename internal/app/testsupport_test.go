@@ -4,9 +4,25 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 
 	"secrio/internal/domain"
 )
+
+// testKDF is a cheap deterministic KDF: SHA-256(salt || password).
+type testKDF struct{}
+
+func newTestKDF() KDF { return testKDF{} }
+
+func (testKDF) RandomSalt() ([]byte, error) {
+	s := make([]byte, 16)
+	_, err := rand.Read(s)
+	return s, err
+}
+
+func (testKDF) Derive(password, salt []byte, _ domain.KDFParams) domain.Key {
+	return domain.Key(sha256.Sum256(append(append([]byte{}, salt...), password...)))
+}
 
 // testCipher is a stdlib AES-GCM Cipher honouring the port contract:
 // truncated input -> ErrCorrupt, authentication failure -> ErrAuthFailed.
