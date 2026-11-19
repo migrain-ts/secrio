@@ -24,7 +24,7 @@ import (
 func runEnv(t *testing.T) *env {
 	t.Helper()
 	e := secretsEnv(t)
-	e.d.Run = systemRunner(nil)
+	e.d.Run = systemRunner(nil, nil)
 	e.d.Environ = func() []string {
 		return []string{
 			"PATH=" + os.Getenv("PATH"),
@@ -231,44 +231,97 @@ func (w *readyWriter) Write(p []byte) (int, error) {
 	return w.buf.Write(p)
 }
 
-func TestRunnerRelaysSignal(t *testing.T) {
-	sigs := make(chan os.Signal, 1)
+type runResult struct {
+	code int
+	err  error
+}
+
+// startRelayChild runs script under systemRunner(sigs, interactive) and
+// returns once the script has written its first output (traps installed).
+func startRelayChild(t *testing.T, sigs chan os.Signal, interactive func() bool, script string) <-chan runResult {
+	t.Helper()
 	w := &readyWriter{ready: make(chan struct{})}
-	type result struct {
-		code int
-		err  error
-	}
-	done := make(chan result, 1)
+	done := make(chan runResult, 1)
 	go func() {
-		code, err := systemRunner(sigs)(context.Background(), "sh",
-			[]string{"-c", `trap "exit 9" TERM; echo ready; while :; do sleep 0.1; done`},
+		code, err := systemRunner(sigs, interactive)(context.Background(), "sh",
+			[]string{"-c", script},
 			[]string{"PATH=" + os.Getenv("PATH")}, strings.NewReader(""), w, io.Discard)
-		done <- result{code, err}
+		done <- runResult{code, err}
 	}()
-	timeout := time.After(5 * time.Second)
 	select {
 	case <-w.ready:
 	case r := <-done:
 		t.Fatalf("child exited early: %+v", r)
-	case <-timeout:
+	case <-time.After(5 * time.Second):
 		t.Fatal("child never became ready")
 	}
+	return done
+}
+
+// sendUntilExit re-sends sig every 50 ms until the child exits (5 s timeout).
+func sendUntilExit(t *testing.T, sigs chan os.Signal, sig os.Signal, done <-chan runResult) runResult {
+	t.Helper()
+	timeout := time.After(5 * time.Second)
 	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()
 	for {
 		select {
-		case sigs <- syscall.SIGTERM:
+		case sigs <- sig:
 		default:
 		}
 		select {
 		case r := <-done:
-			if r.code != 9 || r.err != nil {
-				t.Fatalf("code=%d err=%v", r.code, r.err)
-			}
-			return
+			return r
 		case <-tick.C:
 		case <-timeout:
-			t.Fatal("child did not exit after SIGTERM")
+			t.Fatalf("child did not exit after %v", sig)
 		}
+	}
+}
+
+var (
+	notInteractive = func() bool { return false }
+	isInteractive  = func() bool { return true }
+)
+
+func TestRunnerRelaysSIGTERM(t *testing.T) {
+	const script = `trap "exit 9" TERM; echo ready; while :; do sleep 0.1; done`
+	for i, interactive := range []func() bool{nil, notInteractive, isInteractive} {
+		sigs := make(chan os.Signal, 1)
+		done := startRelayChild(t, sigs, interactive, script)
+		if r := sendUntilExit(t, sigs, syscall.SIGTERM, done); r.code != 9 || r.err != nil {
+			t.Fatalf("case %d: code=%d err=%v", i, r.code, r.err)
+		}
+	}
+}
+
+const intScript = `trap "exit 8" INT; echo ready; while :; do sleep 0.1; done`
+
+func TestRunnerRelaysInterruptWithoutTerminal(t *testing.T) {
+	for i, interactive := range []func() bool{nil, notInteractive} {
+		sigs := make(chan os.Signal, 1)
+		done := startRelayChild(t, sigs, interactive, intScript)
+		if r := sendUntilExit(t, sigs, os.Interrupt, done); r.code != 8 || r.err != nil {
+			t.Fatalf("case %d: code=%d err=%v", i, r.code, r.err)
+		}
+	}
+}
+
+// On a terminal the foreground process group already gets Ctrl-C: the runner
+// must not send the child a second copy, and keeps waiting for the child.
+func TestRunnerSkipsInterruptOnTerminal(t *testing.T) {
+	sigs := make(chan os.Signal, 1)
+	done := startRelayChild(t, sigs, isInteractive, intScript)
+	for i := 0; i < 3; i++ {
+		sigs <- os.Interrupt
+		time.Sleep(100 * time.Millisecond)
+	}
+	select {
+	case r := <-done:
+		t.Fatalf("child received the interrupt: %+v", r)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if r := sendUntilExit(t, sigs, syscall.SIGTERM, done); r.code != 143 || r.err != nil {
+		t.Fatalf("code=%d err=%v", r.code, r.err)
 	}
 }

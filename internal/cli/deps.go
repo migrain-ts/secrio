@@ -58,6 +58,8 @@ func RealDeps() Deps {
 			}
 			return core.New(dir)
 		},
-		Run: systemRunner(nil),
+		Run: systemRunner(nil, func() bool {
+			return term.IsTerminal(int(os.Stdin.Fd())) || term.IsTerminal(int(os.Stdout.Fd())) || term.IsTerminal(int(os.Stderr.Fd()))
+		}),
 	}
 }
