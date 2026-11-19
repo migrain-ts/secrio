@@ -63,6 +63,24 @@ func funcSig(m reflect.Method) (in, out []reflect.Type) {
 	return in, out
 }
 
+// reshaped are forwarders whose results differ from App's because Wails v2
+// cannot return them as is; their inputs must still match.
+var reshaped = map[string]bool{"CurrentVault": true}
+
+// Wails v2 binds (), (T), (error) and (T, error) only; with more results the
+// JS promise resolves to null and the error is lost.
+func TestAPIResultsFitWails(t *testing.T) {
+	errT := reflect.TypeFor[error]()
+	apiT := reflect.TypeFor[*API]()
+	for i := range apiT.NumMethod() {
+		m := apiT.Method(i)
+		n := m.Type.NumOut()
+		if n > 2 || (n == 2 && m.Type.Out(1) != errT) {
+			t.Errorf("%s: results %v not supported by Wails", m.Name, m.Type)
+		}
+	}
+}
+
 func TestAPISignaturesMatchApp(t *testing.T) {
 	apiT, appT := reflect.TypeFor[*API](), reflect.TypeFor[*App]()
 	for _, name := range boundAllowlist {
@@ -78,6 +96,9 @@ func TestAPISignaturesMatchApp(t *testing.T) {
 		}
 		ai, ao := funcSig(am)
 		pi, po := funcSig(pm)
+		if reshaped[name] {
+			ao, po = nil, nil
+		}
 		if !slices.Equal(ai, pi) || !slices.Equal(ao, po) {
 			t.Errorf("%s: API %v, App %v", name, am.Type, pm.Type)
 		}
@@ -99,9 +120,9 @@ func TestAPIForwardsToApp(t *testing.T) {
 	if err != nil || len(vs) != 1 || vs[0] != v {
 		t.Fatalf("ListVaults = %v, %v; want [%v]", vs, err, v)
 	}
-	cur, unlocked, err := api.CurrentVault()
-	if err != nil || cur != v || !unlocked {
-		t.Fatalf("CurrentVault = %v, %v, %v", cur, unlocked, err)
+	cur, err := api.CurrentVault()
+	if err != nil || cur != (CurrentVaultDTO{Vault: v, Unlocked: true}) {
+		t.Fatalf("CurrentVault = %+v, %v", cur, err)
 	}
 	p, err := api.CreateProject("hotenb")
 	if err != nil {
@@ -115,5 +136,15 @@ func TestAPIForwardsToApp(t *testing.T) {
 	}
 	if _, err := api.ListProjects(); codeOf(t, err) != CodeLocked {
 		t.Fatalf("after Lock: %v", err)
+	}
+	if cur, err := api.CurrentVault(); err != nil || cur != (CurrentVaultDTO{Vault: v}) {
+		t.Fatalf("CurrentVault after Lock = %+v, %v", cur, err)
+	}
+}
+
+func TestAPICurrentVaultNone(t *testing.T) {
+	cur, err := NewAPI(newTestApp(t).app).CurrentVault()
+	if err != nil || cur != (CurrentVaultDTO{}) {
+		t.Fatalf("CurrentVault = %+v, %v", cur, err)
 	}
 }

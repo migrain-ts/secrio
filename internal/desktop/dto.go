@@ -6,6 +6,14 @@ type VaultDTO struct {
 	Name string `json:"name"`
 }
 
+// CurrentVaultDTO is App.CurrentVault packed into one value for the webview
+// (Wails v2 drops the results of methods with more than two). Vault.ID is ""
+// when there is no current vault.
+type CurrentVaultDTO struct {
+	Vault    VaultDTO `json:"vault"`
+	Unlocked bool     `json:"unlocked"`
+}
+
 // ProjectDTO is a project with its totals. Counts only; never secret names or
 // values.
 type ProjectDTO struct {

@@ -6,7 +6,10 @@ package desktop
 // stay out of reach of JavaScript.
 //
 // Adding a method callable from the webview requires adding a forwarder here
-// AND adding its name to boundAllowlist in api_test.go.
+// AND adding its name to boundAllowlist in api_test.go. Forwarders keep the
+// App signature, except that Wails v2 only supports results of the form
+// (), (T), (error) or (T, error); a method returning more must pack them in
+// a DTO (see CurrentVault) and be listed in reshaped in api_test.go.
 type API struct{ app *App }
 
 // NewAPI wraps a for binding.
@@ -19,8 +22,18 @@ func (p *API) CreateVault(name, password string) (VaultDTO, error) {
 func (p *API) Unlock(vaultID, password string) error { return p.app.Unlock(vaultID, password) }
 func (p *API) Lock() error                           { return p.app.Lock() }
 func (p *API) SelectVault(vaultID string) error      { return p.app.SelectVault(vaultID) }
-func (p *API) CurrentVault() (VaultDTO, bool, error) { return p.app.CurrentVault() }
-func (p *API) ListProjects() ([]ProjectDTO, error)   { return p.app.ListProjects() }
+
+// CurrentVault is the one forwarder whose shape differs from App: Wails v2
+// only passes back (value) or (value, error), so the pair is packed.
+func (p *API) CurrentVault() (CurrentVaultDTO, error) {
+	v, unlocked, err := p.app.CurrentVault()
+	if err != nil {
+		return CurrentVaultDTO{}, err
+	}
+	return CurrentVaultDTO{Vault: v, Unlocked: unlocked}, nil
+}
+
+func (p *API) ListProjects() ([]ProjectDTO, error) { return p.app.ListProjects() }
 func (p *API) CreateProject(name string) (ProjectDTO, error) {
 	return p.app.CreateProject(name)
 }
