@@ -81,6 +81,9 @@ func TestSetRefusals(t *testing.T) {
 		{"empty", nil, "refusing to store an empty value"},
 		{"lf only", []byte("\n"), "refusing to store an empty value"},
 		{"crlf only", []byte("\r\n"), "refusing to store an empty value"},
+		{"NUL inside", []byte("a\x00b"), "refusing to store a value containing NUL bytes (type text)"},
+		{"NUL only", []byte("\x00"), "refusing to store a value containing NUL bytes (type text)"},
+		{"NUL before lf", []byte("ab\x00\n"), "refusing to store a value containing NUL bytes (type text)"},
 	}
 	for _, c := range cases {
 		if code := e.secret(c.in, "set", "K"); code != ExitFailure || !strings.Contains(e.err.String(), c.wantE) || e.out.Len() != 0 {
@@ -89,6 +92,19 @@ func TestSetRefusals(t *testing.T) {
 		if code := e.secret(nil, "get", "K"); code != ExitFailure {
 			t.Errorf("%s: something was stored (get code=%d)", c.name, code)
 		}
+	}
+}
+
+func TestSetTTYRefusesNUL(t *testing.T) {
+	e := secretsEnv(t)
+	e.tty = true
+	if code := e.run([]string{"a\x00b"}, withCtx("set", "K")...); code != ExitFailure ||
+		!strings.Contains(e.err.String(), "refusing to store a value containing NUL bytes (type text)") {
+		t.Fatalf("code=%d err=%q", code, e.err)
+	}
+	e.tty = false
+	if code := e.secret(nil, "get", "K"); code != ExitFailure {
+		t.Fatalf("something was stored (get code=%d)", code)
 	}
 }
 

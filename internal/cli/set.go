@@ -111,7 +111,14 @@ func newSetCmd(d Deps, flags *Flags) *cobra.Command {
 				return err
 			}
 			defer clear(value)
-			if _, err := u.SetSecret(ctx, en.ID, name, value, domain.TypeText, ""); err != nil {
+			// A NUL value would make ProcessEnv (and so every `run`) fail for
+			// the whole environment.
+			if bytes.IndexByte(value, 0) >= 0 {
+				return errors.New("refusing to store a value containing NUL bytes (type text)")
+			}
+			s, err := u.SetSecret(ctx, en.ID, name, value, domain.TypeText, "")
+			defer clear(s.Value)
+			if err != nil {
 				return err
 			}
 			fmt.Fprintf(d.Out, "set %s\n", name)

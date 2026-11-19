@@ -118,7 +118,24 @@ func TestRunSecrioFailures125(t *testing.T) {
 		t.Errorf("unknown vault: code=%d err=%q", code, e.err)
 	}
 
-	e.secret([]byte("a\x00"+v), "set", "NUL")
+	// `set` refuses NUL values now, so plant one through the Core.
+	ctx := context.Background()
+	u, err := e.svc.Open(ctx, e.lookup("work").ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := resolveProject(ctx, u, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	en, err := resolveEnv(ctx, u, p.ID, "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.SetSecret(ctx, en.ID, "NUL", []byte("a\x00"+v), domain.TypeText, ""); err != nil {
+		t.Fatal(err)
+	}
+	u.Close()
 	if code := e.runCmd("sh", "-c", "echo ran"); code != 125 || e.out.Len() != 0 || strings.Contains(e.err.String(), v) {
 		t.Errorf("NUL: code=%d out=%q err=%q", code, e.out, e.err)
 	}
