@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:dist": "pnpm build && DIST_CHECK=1 vitest run src/assets.test.ts",
     "typecheck": "tsc -b"
   },
   "dependencies": {
