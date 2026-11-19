@@ -28,6 +28,8 @@ func (Suite) RandomSalt() ([]byte, error) {
 // Derive computes a 32-byte key from password and salt using Argon2id.
 func (Suite) Derive(password, salt []byte, p domain.KDFParams) domain.Key {
 	var k domain.Key
-	copy(k[:], argon2.IDKey(password, salt, p.Time, p.MemoryKiB, p.Threads, 32))
+	raw := argon2.IDKey(password, salt, p.Time, p.MemoryKiB, p.Threads, 32)
+	copy(k[:], raw)
+	clear(raw)
 	return k
 }

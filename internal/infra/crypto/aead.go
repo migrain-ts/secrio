@@ -25,7 +25,8 @@ func (Suite) NewKey() (domain.Key, error) {
 	return k, nil
 }
 
-// Seal encrypts plaintext, returning 0x01 | nonce(24) | ciphertext.
+// Seal encrypts plaintext, returning 0x01 | nonce(24) | ciphertext. The
+// version byte is authenticated (prepended to aad).
 func (Suite) Seal(k domain.Key, plaintext, aad []byte) ([]byte, error) {
 	aead, err := chacha20poly1305.NewX(k[:])
 	if err != nil {
@@ -37,7 +38,12 @@ func (Suite) Seal(k domain.Key, plaintext, aad []byte) ([]byte, error) {
 		return nil, fmt.Errorf("generate nonce: %w", err)
 	}
 	nonce := out[1:]
-	return aead.Seal(out, nonce, plaintext, aad), nil
+	return aead.Seal(out, nonce, plaintext, versionedAAD(aad)), nil
+}
+
+// versionedAAD is what the AEAD authenticates: version byte || caller aad.
+func versionedAAD(aad []byte) []byte {
+	return append([]byte{versionByte}, aad...)
 }
 
 // Open authenticates and decrypts a blob produced by Seal.
@@ -53,7 +59,7 @@ func (Suite) Open(k domain.Key, sealed, aad []byte) ([]byte, error) {
 	if sealed[0] != versionByte {
 		return nil, domain.ErrUnsupportedFormat
 	}
-	pt, err := aead.Open(nil, sealed[1:1+ns], sealed[1+ns:], aad)
+	pt, err := aead.Open(nil, sealed[1:1+ns], sealed[1+ns:], versionedAAD(aad))
 	if err != nil {
 		return nil, domain.ErrAuthFailed
 	}
