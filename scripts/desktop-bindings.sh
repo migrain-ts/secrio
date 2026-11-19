@@ -14,3 +14,6 @@ mkdir -p "$root/desktop/frontend/dist"
 cd "$root/cmd/secrio-desktop"
 # `wails generate module` ignores build:tags in wails.json.
 wails generate module -tags desktopapp
+# The generator writes runtime/* as 0755 while `wails build` writes 0644;
+# keep one mode so the committed files do not flip.
+find "$root/desktop/frontend/wailsjs" -type f -exec chmod 644 {} +

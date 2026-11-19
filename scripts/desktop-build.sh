@@ -15,3 +15,5 @@ mkdir -p "$root/desktop/frontend/dist"
 cd "$root/cmd/secrio-desktop"
 # -m: skip `go mod tidy`; -nosyncgomod: keep go.mod's Wails version as is.
 wails build -tags desktopapp -m -nosyncgomod "$@"
+# wails build regenerates the committed bindings with mode 0755; keep 0644.
+find "$root/desktop/frontend/wailsjs" -type f -exec chmod 644 {} +
