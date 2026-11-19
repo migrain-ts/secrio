@@ -6,6 +6,7 @@ package keychain
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -41,9 +42,22 @@ func (s *KeyStore) Load(_ context.Context, vaultID string) (domain.Key, error) {
 		return domain.Key{}, domain.ErrLocked
 	}
 	if err != nil {
-		return domain.Key{}, fmt.Errorf("keychain load: %w", err)
+		return domain.Key{}, mapGetErr(err)
 	}
 	return decode(payload)
+}
+
+// mapGetErr maps a keyring.Get failure. go-keyring (macOS) decodes its own
+// prefixed encodings inside Get; when that fails it returns the raw decoder
+// error, which means a damaged item: domain.ErrCorrupt. The decoder error
+// text is dropped (it can name an input offset, never the payload).
+func mapGetErr(err error) error {
+	var b64 base64.CorruptInputError
+	var hexByte hex.InvalidByteError
+	if errors.As(err, &b64) || errors.As(err, &hexByte) || errors.Is(err, hex.ErrLength) {
+		return fmt.Errorf("keychain item undecodable: %w", domain.ErrCorrupt)
+	}
+	return fmt.Errorf("keychain load: %w", err)
 }
 
 // Delete is idempotent: a missing item is not an error.
