@@ -81,12 +81,8 @@ func (u *Unlocked) History(ctx context.Context, envID domain.ID[domain.Environme
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(recs, func(i, j int) bool {
-		if !recs[i].At.Equal(recs[j].At) {
-			return recs[i].At.After(recs[j].At)
-		}
-		return recs[i].Seq > recs[j].Seq
-	})
+	// Seq is strictly increasing per environment; At can tie or go backwards.
+	sort.Slice(recs, func(i, j int) bool { return recs[i].Seq > recs[j].Seq })
 	out := make([]HistoryEntry, len(recs))
 	for i, r := range recs {
 		out[i] = r.HistoryEntry
