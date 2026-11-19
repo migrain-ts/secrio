@@ -25,6 +25,8 @@ type App struct {
 	unlocked map[string]bool // vaults this App unlocked; Shutdown locks them
 	closed   bool            // set by Shutdown
 
+	imp importState // picked paths and preview hashes (guarded by mu)
+
 	clip clipState // our last clipboard copy (hash only)
 
 	testHookBeforeClip func() // tests only: runs in CopySecret before clip.mu
@@ -280,6 +282,7 @@ func (a *App) Unlock(vaultID, password string) error {
 // every path, errors included).
 func (a *App) Lock() error {
 	defer a.clearOurClipboard()
+	defer a.clearImportState()
 	svc, err := a.service()
 	if err != nil {
 		return err
@@ -343,6 +346,7 @@ func (a *App) Shutdown() {
 		defer func() { _ = recover() }()
 		a.clearOurClipboard()
 	}()
+	defer a.clearImportState()
 	defer func() { _ = recover() }()
 	a.mu.Lock()
 	a.closed = true

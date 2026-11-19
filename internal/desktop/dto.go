@@ -37,3 +37,9 @@ type EnvDTO struct {
 	Name        string `json:"name"`
 	SecretCount int    `json:"secretCount"`
 }
+
+// ImportPreview lists the names a .env import would add or touch. Names only.
+type ImportPreview struct {
+	New       []string `json:"new"`
+	Duplicate []string `json:"duplicate"`
+}
