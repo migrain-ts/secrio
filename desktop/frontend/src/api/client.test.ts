@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { type Api, createRealApi, shouldUseMock } from '@/api/client'
+import {
+  API_METHODS,
+  type Api,
+  createLazyMockApi,
+  createRealApi,
+  createUnavailableApi,
+} from '@/api/client'
 import { ApiError } from '@/api/errors'
 
 type Fn = (...args: unknown[]) => Promise<unknown>
@@ -96,35 +102,95 @@ describe('createRealApi', () => {
 })
 
 describe('api selection', () => {
-  test('shouldUseMock', () => {
-    const withGo = { go: { desktop: { API: {} } } }
-    expect(shouldUseMock(withGo, undefined)).toBe(false)
-    expect(shouldUseMock(withGo, '1')).toBe(true)
-    expect(shouldUseMock({}, undefined)).toBe(true)
-    expect(shouldUseMock({ go: {} }, undefined)).toBe(true)
-    expect(shouldUseMock({ go: { desktop: {} } }, undefined)).toBe(true)
-    expect(shouldUseMock(undefined, undefined)).toBe(true)
-    expect(shouldUseMock(withGo, '0')).toBe(false)
+  test('API_METHODS lists exactly the Api methods', () => {
+    expect([...API_METHODS].sort()).toEqual(Object.keys(createRealApi()).sort())
   })
 
   test('module picks the real client when window.go.desktop.API exists', async () => {
     const API = stubBindings(() => async () => [])
-    const { api } = await import('@/api/client')
+    const { api, backendStatus } = await import('@/api/client')
+    expect(backendStatus).toBe('real')
     await api.listVaults()
     expect(API.ListVaults).toHaveBeenCalledTimes(1)
   })
 
-  test('module picks the mock without window.go', async () => {
+  test('module picks the (lazy) mock without window.go in test mode', async () => {
     vi.stubGlobal('go', undefined)
-    const { api } = await import('@/api/client')
+    const { api, backendStatus } = await import('@/api/client')
+    expect(backendStatus).toBe('mock')
     expect(await api.listVaults()).toEqual([{ id: 'v-work', name: 'work' }])
   })
 
-  test('VITE_MOCK_API=1 forces the mock even inside Wails', async () => {
+  test('the lazy mock keeps one store across calls', async () => {
+    vi.stubGlobal('go', undefined)
+    const { api } = await import('@/api/client')
+    await api.createProject('lazy-one')
+    expect((await api.listProjects()).map((p) => p.name)).toContain('lazy-one')
+  })
+
+  test('VITE_MOCK_API=1 forces the mock even inside Wails (dev/test only)', async () => {
     const API = stubBindings(() => async () => [])
     vi.stubEnv('VITE_MOCK_API', '1')
-    const { api } = await import('@/api/client')
+    const { api, backendStatus } = await import('@/api/client')
+    expect(backendStatus).toBe('mock')
     expect(await api.listVaults()).toEqual([{ id: 'v-work', name: 'work' }])
     expect(API.ListVaults).not.toHaveBeenCalled()
+  })
+
+  test('production without bindings is unavailable, never the mock', async () => {
+    vi.stubGlobal('go', undefined)
+    vi.stubEnv('DEV', false)
+    vi.stubEnv('PROD', true)
+    vi.stubEnv('MODE', 'production')
+    vi.stubEnv('VITE_MOCK_API', '1')
+    const { api, backendStatus } = await import('@/api/client')
+    expect(backendStatus).toBe('unavailable')
+    await expect(api.listVaults()).rejects.toMatchObject({ code: 'internal', message: 'backend unavailable' })
+  })
+
+  test('production with bindings is real, even with VITE_MOCK_API', async () => {
+    const API = stubBindings(() => async () => [])
+    vi.stubEnv('DEV', false)
+    vi.stubEnv('PROD', true)
+    vi.stubEnv('MODE', 'production')
+    vi.stubEnv('VITE_MOCK_API', '1')
+    const { api, backendStatus } = await import('@/api/client')
+    expect(backendStatus).toBe('real')
+    await api.listVaults()
+    expect(API.ListVaults).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('createUnavailableApi', () => {
+  test.each(cases)('%s rejects with internal "backend unavailable"', async (method, _goName, args) => {
+    const un = createUnavailableApi() as unknown as Record<string, Fn>
+    const err = await un[method](...args).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ code: 'internal', message: 'backend unavailable' })
+  })
+
+  test('has the 20 methods', () => {
+    expect(Object.keys(createUnavailableApi()).sort()).toEqual(cases.map((c) => c[0]).sort())
+  })
+})
+
+describe('createLazyMockApi', () => {
+  test('forwards every method with its arguments to the loaded api', async () => {
+    const calls: [string, unknown[]][] = []
+    const target = Object.fromEntries(
+      cases.map(([m]) => [m, async (...a: unknown[]) => (calls.push([m, a]), `r-${m}`)]),
+    ) as unknown as Api
+    let loads = 0
+    const lazy = createLazyMockApi(async () => (loads++, target)) as unknown as Record<string, Fn>
+    for (const [m, , args] of cases) expect(await lazy[m](...args)).toBe(`r-${m}`)
+    expect(calls).toEqual(cases.map(([m, , args]) => [m, args]))
+    expect(loads).toBe(20) // the loader is called per call; it caches the module itself
+  })
+
+  test('a loader failure becomes an ApiError', async () => {
+    const lazy = createLazyMockApi(async () => {
+      throw new Error('chunk failed')
+    })
+    await expect(lazy.listVaults()).rejects.toMatchObject({ code: 'internal' })
   })
 })

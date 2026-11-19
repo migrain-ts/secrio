@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { ApiError } from '@/api/errors'
-import { createMockApi, MOCK_IMPORT_PATH, type MockApi } from '@/api/mock'
+import { createMockApi, MOCK_IMPORT_PATH, MOCK_MARKER, type MockApi } from '@/api/mock'
 import type { ErrorCode } from '@/api/types'
 
 async function code(p: Promise<unknown>): Promise<ErrorCode | 'resolved'> {
@@ -373,6 +373,15 @@ describe('import', () => {
   test('cancelled picker returns an empty path', async () => {
     const m = createMockApi({ pickResult: '' })
     expect(await m.pickEnvFile()).toBe('')
+  })
+})
+
+describe('bundle marker', () => {
+  test('the mock carries MOCK_MARKER, hidden from Object.keys', () => {
+    const m = createMockApi()
+    expect(MOCK_MARKER).toBe('__SECRIO_MOCK_BUNDLE__')
+    expect((m as unknown as Record<string, unknown>)[MOCK_MARKER]).toBe(true)
+    expect(Object.keys(m)).not.toContain(MOCK_MARKER)
   })
 })
 

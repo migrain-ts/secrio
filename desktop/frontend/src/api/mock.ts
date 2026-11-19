@@ -45,6 +45,10 @@ export interface MockTestHooks {
 
 export type MockApi = Api & { readonly __test: MockTestHooks }
 
+/** Unique string that assets.test.ts (pnpm test:dist) looks for: it must never
+ *  appear in a production bundle. Set on every mock instance so it is not
+ *  tree-shaken out of a bundle that does contain the mock. */
+export const MOCK_MARKER = '__SECRIO_MOCK_BUNDLE__'
 export const MOCK_PASSWORD = 'correct horse'
 export const MOCK_IMPORT_PATH = '/Users/dev/hotenb/.env'
 
@@ -475,5 +479,6 @@ export function createMockApi(opts: MockOptions = {}): MockApi {
     clipboardText: () => clipboard,
   }
 
+  Object.defineProperty(api, MOCK_MARKER, { value: true }) // non-enumerable
   return Object.assign(api, { __test })
 }

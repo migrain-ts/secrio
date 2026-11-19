@@ -13,7 +13,8 @@ function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
     const p = join(dir, d.name)
     if (d.isDirectory()) return sources(p)
-    return /\.(ts|tsx)$/.test(d.name) && p !== fileURLToPath(import.meta.url) ? [p] : []
+    // test files are not shipped and may name the URL they guard against
+    return /\.(ts|tsx)$/.test(d.name) && !/\.test\.tsx?$/.test(d.name) ? [p] : []
   })
 }
 

@@ -1,8 +1,8 @@
 // The one entry point the UI uses to talk to Go. Never import wailsjs/runtime
 // here: it throws outside Wails (see docs/superpowers/notes/2026-11-19-wails-spike.md).
 import * as B from '../../wailsjs/go/desktop/API'
-import { parseApiError } from '@/api/errors'
-import { createMockApi } from '@/api/mock'
+import { ApiError, parseApiError } from '@/api/errors'
+import { type BackendStatus, hasBindings, selectApi } from '@/api/select'
 import type {
   CopyResult,
   CurrentVault,
@@ -87,15 +87,71 @@ export function createRealApi(): Api {
   }
 }
 
-/** True unless the Wails bindings are present; VITE_MOCK_API=1 forces the mock. */
-export function shouldUseMock(win: unknown, mockFlag: string | undefined): boolean {
-  if (mockFlag === '1') return true
-  const go = (win as { go?: { desktop?: { API?: unknown } } } | undefined)?.go
-  return !go?.desktop?.API
+/** The 20 Api method names (checked against createRealApi and API.d.ts). */
+export const API_METHODS = [
+  'listVaults',
+  'createVault',
+  'unlock',
+  'lock',
+  'selectVault',
+  'currentVault',
+  'listProjects',
+  'createProject',
+  'deleteProject',
+  'listEnvironments',
+  'createEnvironment',
+  'deleteEnvironment',
+  'listSecrets',
+  'saveSecret',
+  'deleteSecret',
+  'revealSecret',
+  'copySecret',
+  'pickEnvFile',
+  'previewImport',
+  'applyImport',
+] as const satisfies readonly (keyof Api)[]
+
+type AnyFn = (...args: unknown[]) => Promise<unknown>
+
+function buildApi(f: (method: keyof Api) => AnyFn): Api {
+  return Object.fromEntries(API_METHODS.map((m) => [m, f(m)])) as unknown as Api
 }
 
-/** Chosen once at module load. Wails v2 defines window.go synchronously in
- *  /wails/runtime.js, which runs before the deferred module script. */
-export const api: Api = shouldUseMock(globalThis.window, import.meta.env.VITE_MOCK_API)
-  ? createMockApi()
-  : createRealApi()
+/** Production without the Wails bindings: every call rejects, and the shell
+ *  shows a fatal "backend unavailable" screen (backendStatus). */
+export function createUnavailableApi(): Api {
+  return buildApi(() => () => Promise.reject(new ApiError('internal', 'backend unavailable')))
+}
+
+/** Forwards each call to the Api returned by load (the mock, loaded lazily). */
+export function createLazyMockApi(load: () => Promise<Api> = loadMock): Api {
+  return buildApi((m) => (...args) => call(async () => ((await load())[m] as AnyFn)(...args)))
+}
+
+let mockInstance: Promise<Api> | undefined
+
+/** The dynamic import sits behind a condition that is statically false in a
+ *  production build, so Rollup drops the mock chunk entirely. */
+function loadMock(): Promise<Api> {
+  if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+    mockInstance ??= import('@/api/mock').then((m) => m.createMockApi())
+    return mockInstance
+  }
+  return Promise.reject(new ApiError('internal', 'backend unavailable'))
+}
+
+/**
+ * Which backend `api` talks to, computed once at module load. Wails v2 defines
+ * window.go synchronously in /wails/runtime.js, before the deferred module
+ * script runs. 'unavailable' (production without bindings) must render a fatal
+ * "backend unavailable" screen (Task 10); the mock is never used in production.
+ */
+export const backendStatus: BackendStatus = selectApi({
+  dev: import.meta.env.DEV,
+  mode: import.meta.env.MODE,
+  forceMock: import.meta.env.VITE_MOCK_API === '1',
+  hasBindings: hasBindings(globalThis.window),
+})
+
+export const api: Api =
+  backendStatus === 'real' ? createRealApi() : backendStatus === 'mock' ? createLazyMockApi() : createUnavailableApi()

@@ -53,6 +53,25 @@ describe.runIf(enabled)('dist', () => {
     for (const f of fonts) expect(css).toContain(`/assets/${f}`)
   })
 
+  test('the mock api is not in the production bundle', () => {
+    const js = assets()
+      .filter((f) => f.endsWith('.js'))
+      .map(text)
+      .join('\n')
+    // MOCK_MARKER in src/api/mock.ts, and distinctive seed data/password
+    for (const s of ['__SECRIO_MOCK_BUNDLE__', 'fake-jwt-signing-secret-0000', 'hotenb', 'correct horse']) {
+      expect([s, js.includes(s)]).toEqual([s, false])
+    }
+  })
+
+  test('nothing in dist refers to api.iconify.design', () => {
+    const all = readdirSync(`${dist}assets`)
+      .filter((f) => /\.(js|css)$/.test(f))
+      .map(text)
+      .join('\n')
+    expect(all + readFileSync(`${dist}index.html`, 'utf8')).not.toContain('api.iconify.design')
+  })
+
   test('index.html is dark, keeps the CSP and loads nothing remote', () => {
     const html = readFileSync(`${dist}index.html`, 'utf8')
     expect(html).toMatch(/<html[^>]*class="dark"/)
