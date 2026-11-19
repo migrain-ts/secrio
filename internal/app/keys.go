@@ -10,6 +10,9 @@ import (
 const (
 	vaultKeyAAD = "vaultkey"
 
+	// formatVersion is the only vault header version this build understands.
+	formatVersion = 1
+
 	maxKDFTime      = 64 // caps against pre-auth CPU denial of service
 	maxKDFThreads   = 64
 	minKDFMemoryKiB = 8
@@ -48,7 +51,7 @@ func newVaultKeys(c Cipher, kdf KDF, p domain.KDFParams, password []byte) (meta 
 		return VaultMeta{}, domain.Key{}, fmt.Errorf("wrap vault key: %w", err)
 	}
 	meta = VaultMeta{
-		FormatVersion:   1,
+		FormatVersion:   formatVersion,
 		ID:              string(domain.NewID[domain.Vault]()),
 		KDF:             p,
 		Salt:            salt,
@@ -60,6 +63,9 @@ func newVaultKeys(c Cipher, kdf KDF, p domain.KDFParams, password []byte) (meta 
 // unwrapVaultKey derives the unlock key from password and opens the vault key.
 // A wrong password yields domain.ErrInvalidPassword.
 func unwrapVaultKey(c Cipher, kdf KDF, meta VaultMeta, password []byte) (domain.Key, error) {
+	if meta.FormatVersion != formatVersion {
+		return domain.Key{}, fmt.Errorf("%w: vault format version %d", domain.ErrUnsupportedFormat, meta.FormatVersion)
+	}
 	if !validKDFParams(meta.KDF) {
 		return domain.Key{}, fmt.Errorf("%w: kdf params out of range", domain.ErrCorrupt)
 	}

@@ -310,3 +310,22 @@ func TestChangePasswordKeepsSecretsReadable(t *testing.T) {
 	}
 	u3.Close()
 }
+
+func TestUnknownFormatVersionRefused(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	id := h.newVault(t)
+	h.vault().meta.FormatVersion = 99
+	if err := h.svc.Unlock(ctx, id, []byte(testPw), time.Hour, 0); !errors.Is(err, domain.ErrUnsupportedFormat) {
+		t.Fatalf("Unlock = %v", err)
+	}
+	if _, err := h.svc.OpenWithPassword(ctx, id, []byte(testPw)); !errors.Is(err, domain.ErrUnsupportedFormat) {
+		t.Fatalf("OpenWithPassword = %v", err)
+	}
+	if err := h.svc.ChangePassword(ctx, id, []byte(testPw), []byte("new")); !errors.Is(err, domain.ErrUnsupportedFormat) {
+		t.Fatalf("ChangePassword = %v", err)
+	}
+	if len(h.sessions.m) != 0 {
+		t.Fatal("session saved for unsupported format")
+	}
+}
