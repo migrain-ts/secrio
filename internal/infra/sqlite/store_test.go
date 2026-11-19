@@ -254,3 +254,42 @@ func TestTwoConnectionsConcurrentWrites(t *testing.T) {
 		t.Errorf("list = %d %v", len(l), err)
 	}
 }
+
+func TestOpenTinyFilesAreCorruptAndUntouched(t *testing.T) {
+	for _, n := range []int{1, 99} {
+		path := filepath.Join(t.TempDir(), "t.db")
+		b := make([]byte, n)
+		rand.Read(b)
+		if err := os.WriteFile(path, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := (sqlite.Opener{}).Open(context.Background(), path); !errors.Is(err, domain.ErrCorrupt) {
+			t.Fatalf("n=%d err = %v", n, err)
+		}
+		after, _ := os.ReadFile(path)
+		if string(after) != string(b) {
+			t.Errorf("n=%d file modified", n)
+		}
+	}
+}
+
+func TestOpenTruncatedRealVault(t *testing.T) {
+	s, path := newStore(t)
+	if err := s.Put(context.Background(), rec("a", "p")); err != nil {
+		t.Fatal(err)
+	}
+	s.(io.Closer).Close()
+	if err := os.Truncate(path, 50); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(path + "-wal")
+	os.Remove(path + "-shm")
+	before, _ := os.ReadFile(path)
+	if _, err := (sqlite.Opener{}).Open(context.Background(), path); !errors.Is(err, domain.ErrCorrupt) {
+		t.Fatalf("err = %v", err)
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(before) {
+		t.Error("file modified")
+	}
+}

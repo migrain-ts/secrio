@@ -50,6 +50,10 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	return migrateWith(ctx, db, ms)
+}
+
+func migrateWith(ctx context.Context, db *sql.DB, ms []migration) error {
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)`); err != nil {
 		return mapErr(err)
 	}
@@ -77,6 +81,15 @@ func applyMigration(ctx context.Context, db *sql.DB, m migration) error {
 		return mapErr(err)
 	}
 	defer tx.Rollback()
+	// The tx holds the write lock (BEGIN IMMEDIATE); re-check here because
+	// another process may have applied m since the caller read MAX(version).
+	var cur sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&cur); err != nil {
+		return mapErr(err)
+	}
+	if cur.Int64 >= int64(m.version) {
+		return nil
+	}
 	if _, err := tx.ExecContext(ctx, m.sql); err != nil {
 		return fmt.Errorf("migration %d: %w", m.version, mapErr(err))
 	}

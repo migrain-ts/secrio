@@ -15,6 +15,8 @@ import (
 	"secrio/internal/domain"
 )
 
+const sqliteHeaderSize = 100
+
 // Opener implements app.VaultOpener on SQLite files.
 type Opener struct{}
 
@@ -38,11 +40,17 @@ func (Opener) Create(ctx context.Context, path string) (app.RecordStore, error) 
 
 // Open opens an existing vault file and applies pending migrations.
 func (Opener) Open(ctx context.Context, path string) (app.RecordStore, error) {
-	if _, err := os.Stat(path); err != nil {
+	fi, err := os.Stat(path)
+	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, domain.ErrNotFound
 		}
 		return nil, err
+	}
+	// Non-empty but smaller than the 100-byte SQLite header: SQLite would
+	// treat it as a fresh DB and overwrite it. Refuse instead.
+	if sz := fi.Size(); sz > 0 && sz < sqliteHeaderSize {
+		return nil, domain.ErrCorrupt
 	}
 	return open(ctx, path)
 }
