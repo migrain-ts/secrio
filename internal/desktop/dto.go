@@ -25,6 +25,12 @@ type SecretDTO struct {
 	UpdatedAt   string `json:"updatedAt"`
 }
 
+// CopyResult tells the UI when the copied value will be cleared; 0 means it
+// will not be cleared automatically.
+type CopyResult struct {
+	ClearInSeconds int `json:"clearInSeconds"`
+}
+
 // EnvDTO is an environment with its secret count.
 type EnvDTO struct {
 	ID          string `json:"id"`

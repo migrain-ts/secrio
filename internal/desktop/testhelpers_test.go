@@ -38,20 +38,27 @@ type testEnv struct {
 }
 
 // newTestApp builds an App over a real Core in a temp dir.
-func newTestApp(t *testing.T) *testEnv {
+func newTestApp(t *testing.T) *testEnv { return newTestAppWith(t, nil) }
+
+// newTestAppWith is newTestApp with a hook to adjust the Deps.
+func newTestAppWith(t *testing.T, opt func(*Deps)) *testEnv {
 	t.Helper()
 	env := &testEnv{
 		dir:  t.TempDir(),
 		fake: clock.NewFake(time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)),
 		keys: &countingKeys{MemoryKeyStore: keychain.NewMemory()},
 	}
-	env.app = New(Deps{
+	d := Deps{
 		DataDir: func() (string, error) { return env.dir, nil },
 		NewService: func() (*app.Service, error) {
 			env.newed++
 			return env.otherService()
 		},
-	})
+	}
+	if opt != nil {
+		opt(&d)
+	}
+	env.app = New(d)
 	return env
 }
 

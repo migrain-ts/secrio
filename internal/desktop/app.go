@@ -21,6 +21,8 @@ type App struct {
 	mu      sync.Mutex // guards svc and current
 	svc     *app.Service
 	current string // selected vault id
+
+	clip clipState // our last clipboard copy (hash only)
 }
 
 // New builds an App. Missing NewService or DataDir is a programmer error.
@@ -59,10 +61,6 @@ func (a *App) dataDir() (string, error) {
 	}
 	return dir, nil
 }
-
-// clearOurClipboard removes our copied secret from the clipboard. It is a
-// documented no-op until the clipboard task implements it.
-func (a *App) clearOurClipboard() {}
 
 func (a *App) setCurrent(id string) {
 	a.mu.Lock()
