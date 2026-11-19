@@ -201,7 +201,10 @@ func TestCLIExitCodes(t *testing.T) {
 		{"child exit code", nil, args([]string{"run"}, flagsWHP, []string{"--", "sh", "-c", "exit 7"}), 7},
 		{"command not found", nil, args([]string{"run"}, flagsWHP, []string{"--", "nosuchcommand_xyz"}), 127},
 		{"unknown env", nil, []string{"run", "--vault", "work", "--project", "hotenb", "--env", "nope", "--", "true"}, 125},
-		{"run without --", nil, args([]string{"run"}, flagsWHP, []string{"echo", "hi"}), 2},
+		{"run without --", nil, args([]string{"run"}, flagsWHP, []string{"echo", "hi"}), 125},
+		{"run without command", nil, args([]string{"run"}, flagsWHP, []string{"--"}), 125},
+		{"run missing env context", nil, []string{"run", "--vault", "work", "--project", "hotenb", "--", "true"}, 125},
+		{"run unknown flag", nil, []string{"run", "--nosuch", "--", "true"}, 2},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

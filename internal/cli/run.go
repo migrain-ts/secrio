@@ -52,17 +52,15 @@ func newRunCmd(d Deps, flags *Flags) *cobra.Command {
 		Short: "Run a command with the environment's secrets as environment variables",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if dash := cmd.ArgsLenAtDash(); dash != 0 || len(args) == 0 {
-				return UsageErr(runUsage)
+				return &ExitError{Code: ExitRunFailure, Err: errors.New(runUsage)}
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			env, err := runEnvironment(cmd.Context(), d, flags)
 			if err != nil {
-				var ee *ExitError
-				if errors.As(err, &ee) && ee.Code == ExitUsage {
-					return err
-				}
+				// Every pre-launch failure is 125, usage errors included: exit 2
+				// would collide with a child's own exit 2.
 				return &ExitError{Code: ExitRunFailure, Err: err}
 			}
 			code, err := d.Run(cmd.Context(), args[0], args[1:], env, d.In, d.Out, d.Err)

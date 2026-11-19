@@ -134,12 +134,21 @@ func TestRunUsageErrors(t *testing.T) {
 	e.run(nil, "lock", "work") // usage errors win over a locked vault
 	for _, args := range [][]string{
 		withCtx("run"),
-		withCtx("run", "sh", "-c", "true"),
+		withCtx("run", "sh", "true"),
 		withCtx("run", "--"),
 		withCtx("run", "x", "--", "true"),
 		{"--vault", "work", "--env", "dev", "run", "--", "true"},
 		{"--vault", "work", "--project", "a", "run", "--", "true"},
 		{"--project", "a", "--env", "dev", "run", "--", "true"},
+	} {
+		if code := e.run(nil, args...); code != ExitRunFailure {
+			t.Errorf("%v: code=%d err=%q", args, code, e.err)
+		}
+	}
+	// Flag-parse errors stay usage errors (exit 2).
+	for _, args := range [][]string{
+		{"run", "--nosuch", "--", "true"},
+		withCtx("run", "sh", "-c", "true"), // -c before any "--" is parsed as a flag
 	} {
 		if code := e.run(nil, args...); code != ExitUsage {
 			t.Errorf("%v: code=%d err=%q", args, code, e.err)
