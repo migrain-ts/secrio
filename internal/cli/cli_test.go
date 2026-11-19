@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -108,5 +109,66 @@ func TestNoUsageDumpOnError(t *testing.T) {
 	}
 	if strings.Count(errb.String(), "\n") != 1 {
 		t.Fatalf("stderr not one line: %q", errb.String())
+	}
+}
+
+func runWith(t *testing.T, args []string, cmds ...*cobra.Command) (int, string, string) {
+	t.Helper()
+	d, out, errb := testDeps()
+	root := NewRoot(d)
+	root.AddCommand(cmds...)
+	usageArgs(root) // idempotent; covers commands added after NewRoot
+	code := run(d, root, args)
+	return code, out.String(), errb.String()
+}
+
+func TestArgCountErrorsAreUsage(t *testing.T) {
+	mk := func() *cobra.Command {
+		return &cobra.Command{Use: "one", Args: cobra.ExactArgs(1), RunE: func(*cobra.Command, []string) error { return nil }}
+	}
+	for _, args := range [][]string{{"one"}, {"one", "a", "b"}} {
+		code, _, errb := runWith(t, args, mk())
+		if code != ExitUsage || !strings.HasPrefix(errb, "secrio: ") {
+			t.Errorf("%v: code=%d stderr=%q", args, code, errb)
+		}
+	}
+	if code, _, _ := runWith(t, []string{"one", "a"}, mk()); code != ExitOK {
+		t.Errorf("valid args: code=%d", code)
+	}
+}
+
+func TestGroupUnknownSubcommandIsUsage(t *testing.T) {
+	grp := &cobra.Command{Use: "grp"}
+	grp.AddCommand(&cobra.Command{Use: "sub", RunE: func(*cobra.Command, []string) error { return nil }})
+	code, _, errb := runWith(t, []string{"grp", "bogus"}, grp)
+	if code != ExitUsage || !strings.HasPrefix(errb, "secrio: ") {
+		t.Fatalf("code=%d stderr=%q", code, errb)
+	}
+}
+
+func TestArgsExitErrorKeepsCode(t *testing.T) {
+	c := &cobra.Command{Use: "x", RunE: func(*cobra.Command, []string) error { return nil },
+		Args: func(*cobra.Command, []string) error { return LockedErr(errors.New("locked")) }}
+	if code, _, _ := runWith(t, []string{"x"}, c); code != ExitLocked {
+		t.Fatalf("code=%d", code)
+	}
+}
+
+func TestHelpExitsZero(t *testing.T) {
+	for _, f := range []string{"-h", "--help"} {
+		d, out, errb := testDeps()
+		if code := Execute(d, []string{f}); code != ExitOK || !strings.Contains(out.String(), "Usage:") || errb.Len() != 0 {
+			t.Errorf("%s: code=%d out=%q err=%q", f, code, out.String(), errb.String())
+		}
+	}
+}
+
+func TestExecuteNilArgsIgnoresOSArgs(t *testing.T) {
+	old := os.Args
+	os.Args = []string{"secrio", "bogus-from-os-args"}
+	defer func() { os.Args = old }()
+	d, _, _ := testDeps()
+	if code := Execute(d, nil); code != ExitOK {
+		t.Fatalf("code=%d", code)
 	}
 }

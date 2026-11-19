@@ -38,6 +38,10 @@ func UsageErr(format string, a ...any) error {
 // LockedErr marks err as "vault locked / invalid password" (code 3).
 func LockedErr(err error) error { return &ExitError{Code: ExitLocked, Err: err} }
 
+// Cobra argument and flag-parse errors are mapped to exit 2 centrally (see
+// usageArgs and NewRoot). Required flags are not used: commands must validate
+// them themselves and return UsageErr.
+
 // exitCode maps an error chain to a process exit code.
 func exitCode(err error) int {
 	var ee *ExitError

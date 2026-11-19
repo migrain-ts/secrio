@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -39,11 +40,49 @@ func NewRoot(d Deps) *cobra.Command {
 
 	// Subcommands: one constructor call per line, appended by later tasks.
 
+	usageArgs(root)
 	return root
+}
+
+// usageArgs makes every argument-validation error exit 2, for all commands
+// in the tree (including ones added by later tasks). Groups (commands with
+// subcommands and no Args) reject positional arguments as unknown commands;
+// leaves without Args keep Cobra's default; errors already carrying an
+// *ExitError keep their code.
+func usageArgs(cmd *cobra.Command) {
+	switch {
+	case cmd.Args == nil && cmd.HasSubCommands():
+		cmd.Args = func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return UsageErr("unknown command %q for %q", args[0], cmd.CommandPath())
+			}
+			return nil
+		}
+		if !cmd.Runnable() {
+			// A non-runnable command short-circuits to help before Args runs.
+			cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
+		}
+	case cmd.Args != nil:
+		inner := cmd.Args
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			err := inner(c, args)
+			var ee *ExitError
+			if err == nil || errors.As(err, &ee) {
+				return err
+			}
+			return UsageErr("%v", err)
+		}
+	}
+	for _, c := range cmd.Commands() {
+		usageArgs(c)
+	}
 }
 
 // Execute runs the CLI and returns the process exit code.
 func Execute(d Deps, args []string) int {
+	if args == nil {
+		args = []string{} // never let Cobra fall back to os.Args
+	}
 	return run(d, NewRoot(d), args)
 }
 
