@@ -25,7 +25,7 @@ secrio run --vault work --project hotenb --env production -- ./deploy.sh
 secrio lock work
 ```
 
-For scripts, set `SECRIO_PASSWORD` instead of running `unlock`; the vault is opened with it for that one command and no session is created:
+For scripts, set `SECRIO_PASSWORD` instead of running `unlock`; if `SECRIO_PASSWORD` is set it is used whenever no usable session exists, including when the OS keychain is unavailable. The vault is opened with it for that one command and no session is created:
 
 ```sh
 printf %s "$DB_URL" | SECRIO_PASSWORD=... secrio set DATABASE_URL
@@ -37,7 +37,7 @@ printf %s "$DB_URL" | SECRIO_PASSWORD=... secrio set DATABASE_URL
 |---|---|
 | `vault create <name>` | Create a vault (name: letters, digits, `.`, `_`, `-`, max 64) |
 | `vault list` | List vault names |
-| `unlock [vault]` | Start a session (`--ttl` default 12h, `--idle` default 1h, 0 disables) |
+| `unlock [vault]` | Start a session (`--ttl` max lifetime, default 12h, must be positive; `--idle` idle timeout, default 1h, `--idle 0` disables it) |
 | `lock [vault]` | End the session |
 | `project create <name>` | Create a project in the context vault |
 | `env create <name>` | Create an environment in the context project |
@@ -70,7 +70,7 @@ Each of `vault`, `project`, `env` is resolved separately. Priority: flags, then 
 | 2 | Usage error |
 | 3 | Vault locked, wrong password, or no password available without a terminal |
 
-For `run`: the child's own exit code; 125 if secrio failed before starting the command; 126 if it could not be executed; 127 if it was not found; 128+N if it was killed by signal N.
+Under `run`, secrio's own failures before the command starts (including a locked vault or a wrong password) exit 125, not 3. Otherwise `run` returns the child's own exit code; 125 if secrio failed before starting the command; 126 if it could not be executed; 127 if it was not found; 128+N if it was killed by signal N.
 
 ## Security notes
 
@@ -83,4 +83,4 @@ For `run`: the child's own exit code; 125 if secrio failed before starting the c
 
 ## Current limits
 
-No import, export, edit or delete command yet, and no desktop app. Sessions use the OS keychain, so a keychain must be available for `unlock`.
+No import, export, edit or delete command yet, and no desktop app. `unlock` needs a working OS keychain; other commands can use `SECRIO_PASSWORD` without one.
