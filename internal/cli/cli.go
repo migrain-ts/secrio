@@ -9,13 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Flags holds the global context flags. Task 2 moves this type.
-type Flags struct{ Vault, Project, Env string }
-
 // NewRoot builds the root command with every subcommand attached.
 func NewRoot(d Deps) *cobra.Command {
 	var flags Flags
-	_ = &flags // handed to the commands below as they are added
 
 	root := &cobra.Command{
 		Use:           "secrio",
@@ -37,6 +33,8 @@ func NewRoot(d Deps) *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return UsageErr("%v", err)
 	})
+
+	addContextFlags(root, &flags)
 
 	// Subcommands: one constructor call per line, appended by later tasks.
 
