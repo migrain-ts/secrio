@@ -60,8 +60,9 @@ Every screen task (10-13) follows these rules, then runs the review gate: `get-r
 - Trim names before validation (projects/envs: the Core rejects blank / control chars; secret
   names `^[A-Za-z_][A-Za-z0-9_]*$` validated client-side too, server is the authority).
 - Secret value field: no trimming (a value is exact), paste allowed, `spellcheck=false`,
-  `autocomplete="off"`. Password fields: `type=password`, `autocomplete="current-password"`
-  (unlock) / `"new-password"` (create vault).
+  `autocomplete="off"`. Password fields (unlock, create vault): `type=password`,
+  `autocomplete="off"`, `spellcheck=false`: a master password must never be offered for
+  storage, and the webviews have no password autosave to integrate with anyway.
 - Dialogs: focus moves in on open, is trapped, returns to the trigger on close; Escape closes.
 - On a `locked` error mid-dialog: keep non-secret input, go to unlock, tell the user why;
   never silently drop what they typed (Review Focus). Passwords and values are cleared from
