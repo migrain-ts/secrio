@@ -2,7 +2,7 @@
   "library": "iconoir",
   "prefix": "iconoir",
   "source": "iconify",
-  "installedAt": "2026-11-20T09:38:27.902Z",
+  "installedAt": "2026-11-20T20:00:44.481Z",
   "icons": [
     "check",
     "copy",
@@ -20,6 +20,7 @@
     "plus",
     "search",
     "trash",
-    "warning-circle"
+    "warning-circle",
+    "xmark"
   ]
 }

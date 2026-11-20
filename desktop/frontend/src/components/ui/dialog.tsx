@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { X } from "lucide-react"
 
+import { XmarkIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
 
 const Dialog = DialogPrimitive.Root
@@ -48,7 +48,7 @@ const DialogContent = React.forwardRef<
       {children}
       {/* Secrio: a 32 px target (review gate: the 16 px icon alone was too small) */}
       <DialogPrimitive.Close disabled={closeDisabled} className="absolute right-3 top-3 grid size-8 place-items-center rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-open:bg-accent data-open:text-muted-foreground">
-        <X className="h-4 w-4" />
+        <XmarkIcon aria-hidden="true" className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Popup>

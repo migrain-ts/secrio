@@ -20,3 +20,4 @@ export { CopyIcon } from "./copy";
 export { EditPencilIcon } from "./edit-pencil";
 export { KeyIcon } from "./key";
 export { ImportIcon } from "./import";
+export { XmarkIcon } from "./xmark";

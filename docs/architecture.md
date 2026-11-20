@@ -311,6 +311,7 @@ Local patches to the generated kit (a kit regeneration would revert them; reappl
 | `components/ui/button.tsx`, `card.tsx`, `empty.tsx` | Drop shadows removed (review gate: shadows only on overlays) |
 | `components/ui/dialog.tsx` | Corner X is a 32 px target; `closeDisabled` prop (disabled while an import applies) |
 | `components/ui/dropdown-menu.tsx`, `select.tsx` | `@iconify/react` (runtime fetch from api.iconify.design) replaced by inline Iconoir icons (`components/icons/`) |
+| `components/ui/dialog.tsx`, `toast.tsx` | `lucide-react` `X` replaced by the Iconoir `XmarkIcon` (`aria-hidden`); `lucide-react` is no longer a dependency |
 | `index.css` | `--destructive-text` (readable red text on dark surfaces); `--font-sans` = self-hosted Inter, no Google Fonts import; `--sidebar-*` mapped to linear tokens |
 
 ### Webview security
