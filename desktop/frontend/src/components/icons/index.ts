@@ -9,3 +9,8 @@ export { CheckIcon } from "./check";
 export { LockIcon } from "./lock";
 export { WarningCircleIcon } from "./warning-circle";
 export { InfoCircleIcon } from "./info-circle";
+export { MoreHorizIcon } from "./more-horiz";
+export { FolderIcon } from "./folder";
+export { SearchIcon } from "./search";
+export { PlusIcon } from "./plus";
+export { TrashIcon } from "./trash";
