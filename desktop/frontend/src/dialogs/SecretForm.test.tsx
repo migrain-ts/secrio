@@ -124,22 +124,21 @@ describe('SecretForm: create', () => {
     ])
   })
 
+  const RULE = "Use letters, digits and underscores; don't start with a digit"
   test.each([
-    ['1ABC', 'starts with a digit'],
-    ['MY-KEY', 'dash'],
-    ['MY KEY', 'space'],
-    ['', 'empty'],
-    ['CLÉ', 'non-ASCII'],
-  ])('name %j (%s) is refused before any call', async (name) => {
+    ['1ABC', 'starts with a digit', RULE],
+    ['MY-KEY', 'dash', RULE],
+    ['MY KEY', 'space', RULE],
+    ['', 'empty', 'A name is required'],
+    ['CLÉ', 'non-ASCII', RULE],
+  ])('name %j (%s) is refused before any call', async (name, _why, message) => {
     const m = createMockApi()
     const spy = vi.spyOn(m, 'saveSecret')
     const { user } = await setup(m)
     if (name) await user.type(nameInput(), name)
     await user.type(valueInput(), 'v')
     await user.click(save())
-    await waitFor(() =>
-      expect(nameInput()).toHaveAccessibleDescription("Use letters, digits and underscores; don't start with a digit"),
-    )
+    await waitFor(() => expect(nameInput()).toHaveAccessibleDescription(message))
     expect(nameInput()).toHaveAttribute('aria-invalid', 'true')
     expect(nameInput()).toHaveFocus()
     expect(spy).not.toHaveBeenCalled()

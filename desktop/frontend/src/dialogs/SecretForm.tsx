@@ -22,7 +22,7 @@ const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 const MAX_VALUE_BYTES = 1 << 20
 const NAME_ERROR = "Use letters, digits and underscores; don't start with a digit"
 
-const nameError = (n: string) => (NAME_RE.test(n) ? null : NAME_ERROR)
+const nameError = (n: string) => (n === '' ? 'A name is required' : NAME_RE.test(n) ? null : NAME_ERROR)
 function valueError(v: string): string | null {
   if (v === '') return 'A value is required'
   if (new TextEncoder().encode(v).length > MAX_VALUE_BYTES) return 'Value is too large (max 1 MiB)'
