@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import type { Api } from '@/api/client'
 import { ApiError } from '@/api/errors'
@@ -234,8 +234,12 @@ describe('Projects: create', () => {
     await waitFor(() => expect(pending).toHaveLength(3))
     pending[2]([...FIXTURE.slice(0, 2), zeta]) // the newest answer first
     await waitFor(() => expect(cardNames()).toEqual(['billing', 'Api-Gateway', 'zeta']))
-    pending[1]([...FIXTURE, zeta]) // then the stale one, which still has cdn
-    await new Promise((r) => setTimeout(r, 20))
+    // then the stale one, which still has cdn. Its path is promises only, so
+    // one macrotask turn inside act drains it and flushes any render: no sleep.
+    await act(async () => {
+      pending[1]([...FIXTURE, zeta])
+      await new Promise((r) => setTimeout(r, 0))
+    })
     expect(cardNames()).toEqual(['billing', 'Api-Gateway', 'zeta'])
   })
 
