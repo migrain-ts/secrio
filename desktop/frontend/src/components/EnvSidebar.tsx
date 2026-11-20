@@ -28,7 +28,7 @@ export function EnvSidebar({ envs, currentId, onSelect, onNew, onDelete, newRef 
           <h2 className="text-xs font-medium text-muted-foreground">Environments</h2>
           {/* in the no-env state the empty state carries this action instead */}
           {envs !== null && envs.length > 0 && (
-            <IconButton ref={newRef} size="xs" aria-label="New environment" title="New environment" onClick={onNew}>
+            <IconButton ref={newRef} size="xs" aria-label="New environment" onClick={onNew}>
               <PlusIcon aria-hidden className="size-4" />
             </IconButton>
           )}
