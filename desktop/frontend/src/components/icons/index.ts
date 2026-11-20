@@ -19,3 +19,4 @@ export { EyeClosedIcon } from "./eye-closed";
 export { CopyIcon } from "./copy";
 export { EditPencilIcon } from "./edit-pencil";
 export { KeyIcon } from "./key";
+export { ImportIcon } from "./import";

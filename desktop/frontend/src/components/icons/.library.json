@@ -2,7 +2,7 @@
   "library": "iconoir",
   "prefix": "iconoir",
   "source": "iconify",
-  "installedAt": "2026-11-20T09:10:24.914Z",
+  "installedAt": "2026-11-20T09:38:27.902Z",
   "icons": [
     "check",
     "copy",
@@ -10,6 +10,7 @@
     "eye",
     "eye-closed",
     "folder",
+    "import",
     "info-circle",
     "key",
     "lock",

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '@/api/errors'
 import type { EnvDTO, SecretDTO } from '@/api/types'
 import { EnvSidebar } from '@/components/EnvSidebar'
-import { FolderIcon, KeyIcon, PlusIcon, SearchIcon, WarningCircleIcon } from '@/components/icons'
+import { FolderIcon, ImportIcon, KeyIcon, PlusIcon, SearchIcon, WarningCircleIcon } from '@/components/icons'
 import { SecretDetail } from '@/components/SecretDetail'
 import { type RowAction, SecretTable } from '@/components/SecretTable'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
 import { ConfirmDelete } from '@/dialogs/ConfirmDelete'
+import { ImportEnv } from '@/dialogs/ImportEnv'
+import type { ImportSummary } from '@/dialogs/importMachine'
 import { NewEnv } from '@/dialogs/NewEnv'
 import { SecretForm } from '@/dialogs/SecretForm'
 import { useReveal } from '@/hooks/useReveal'
@@ -44,12 +46,14 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
   const [delSecretOpen, setDelSecretOpen] = useState(false)
   const [delEnv, setDelEnv] = useState<EnvDTO | null>(null)
   const [delEnvOpen, setDelEnvOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const newRef = useRef<HTMLButtonElement>(null) // "New secret" (toolbar or empty state)
   const newEnvRef = useRef<HTMLButtonElement>(null) // "New environment" (sidebar or empty state)
   const searchRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLTableSectionElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null) // what opened the current delete dialog
+  const importTriggerRef = useRef<HTMLElement | null>(null) // toolbar or empty-state "Import .env"
   const deletedRef = useRef(false)
 
   // Sequence guards: only the latest request of each list may land.
@@ -198,6 +202,23 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
   }, [])
   const onSelect = useCallback((name: string) => setSelected(name), [])
 
+  function openImport(trigger: HTMLElement) {
+    reveal.hide()
+    importTriggerRef.current = trigger
+    setImportOpen(true)
+  }
+
+  async function onImported(r: ImportSummary) {
+    setSelected(null)
+    reveal.hide()
+    await refresh()
+    let text = `Imported ${r.imported} new`
+    if (r.replaced > 0) text += `, replaced ${r.replaced}`
+    if (r.skipped > 0) text += `, skipped ${r.skipped}`
+    toast({ title: text })
+    rescueFocus()
+  }
+
   async function deleteSecret(s: SecretDTO) {
     if (!currentEnvId) return
     try {
@@ -230,6 +251,12 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
     <Button ref={newRef} onClick={() => openEdit(null)}>
       <PlusIcon aria-hidden className="size-4" />
       New secret
+    </Button>
+  )
+  const importButton = (
+    <Button variant="outline" onClick={(e) => openImport(e.currentTarget)}>
+      <ImportIcon aria-hidden className="size-4" />
+      Import .env
     </Button>
   )
 
@@ -329,6 +356,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
                         }}
                       />
                     </div>
+                    {importButton}
                     {newSecretButton}
                   </>
                 )}
@@ -343,8 +371,13 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
                   <Empty
                     icon={<KeyIcon aria-hidden />}
                     title={`No secrets in ${env.name} yet`}
-                    description="Add the first secret of this environment."
-                    action={newSecretButton}
+                    description="Add the first secret, or import them from a .env file."
+                    action={
+                      <>
+                        {newSecretButton}
+                        {importButton}
+                      </>
+                    }
                   />
                 )}
                 {hasSecrets && shown.length === 0 && (
@@ -409,6 +442,17 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
             toast({ title: 'Saved' })
             rescueFocus()
           }}
+        />
+      )}
+      {currentEnvId && (
+        <ImportEnv
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          envId={currentEnvId}
+          envName={env?.name ?? ''}
+          onImported={(r) => void onImported(r)}
+          // the empty-state trigger is gone after a first import
+          finalFocus={() => (importTriggerRef.current?.isConnected ? importTriggerRef.current : newRef.current)}
         />
       )}
       <NewEnv

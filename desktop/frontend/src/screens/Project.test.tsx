@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { Api } from '@/api/client'
 import { ApiError } from '@/api/errors'
-import { createMockApi, MOCK_PASSWORD, type MockApi, type MockOptions } from '@/api/mock'
+import { createMockApi, MOCK_IMPORT_PATH, MOCK_PASSWORD, type MockApi, type MockOptions } from '@/api/mock'
 import type { SecretDTO } from '@/api/types'
 import { REVEAL_MS } from '@/hooks/useReveal'
 import { app, renderApp } from '@/test/app'
@@ -367,7 +367,7 @@ describe('Project: delete', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete secret' }))
     expect(await screen.findByText('No secrets in Staging yet')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'New secret' })).toHaveFocus())
-    expect(screen.queryByRole('button', { name: /import/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Import .env' })).toBeInTheDocument()
   })
 
   test('env with secrets: type its name to confirm; then the first remaining env is selected', async () => {
@@ -527,6 +527,8 @@ describe('Project: search and keyboard', () => {
     const { user } = await openHotenb(await seeded())
     const search = screen.getByRole('searchbox', { name: 'Search secrets' })
     search.focus()
+    await user.tab() // Import .env
+    expect(screen.getByRole('button', { name: 'Import .env' })).toHaveFocus()
     await user.tab() // New secret
     expect(screen.getByRole('button', { name: 'New secret' })).toHaveFocus()
     await user.tab()
@@ -559,5 +561,100 @@ describe('Project: large list', () => {
     await table('Load')
     expect(rows()).toHaveLength(500)
     expect(new Set(rowNames()).size).toBe(500)
+  })
+})
+
+describe('Project: import .env', () => {
+  const FILE = { NEW_ONE: VALUE, JWT_SECRET: VALUE, NEW_TWO: VALUE }
+
+  async function withFile() {
+    const m = await seeded()
+    m.__test.setFileContent(MOCK_IMPORT_PATH, FILE)
+    return m
+  }
+
+  async function previewFrom(user: ReturnType<typeof renderApp>['user'], trigger: HTMLElement) {
+    await user.click(trigger)
+    const dialog = await screen.findByRole('dialog', { name: 'Import .env file' })
+    await user.click(within(dialog).getByRole('button', { name: 'Choose file' }))
+    await within(dialog).findByText('2 new, 1 already exists')
+    return dialog
+  }
+
+  test('skip from the toolbar: new rows, counts, one toast, selection and reveal cleared, focus back', async () => {
+    const m = await withFile()
+    const { user } = await openHotenb(m)
+    await user.click(row('SEEDED'))
+    await user.click(within(detail()).getByRole('button', { name: 'Reveal' }))
+    await waitFor(() => expect(revealed()).toHaveTextContent(VALUE))
+    const trigger = screen.getByRole('button', { name: 'Import .env' })
+    const dialog = await previewFrom(user, trigger)
+    expect(revealed()).toBeNull()
+    noValueInPage()
+    await user.click(within(dialog).getByRole('button', { name: 'Import 2 secrets' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Import .env file' })).not.toBeInTheDocument())
+    await waitFor(() => expect(rowNames()).toEqual(expect.arrayContaining(['NEW_ONE', 'NEW_TWO'])))
+    await waitFor(() => expect(envButton('Development')).toHaveAccessibleName('Development, 10 secrets'))
+    expect(await screen.findByText('Imported 2 new, skipped 1')).toBeInTheDocument()
+    expect(within(detail()).getByText('Select a secret to see its details.')).toBeInTheDocument()
+    await waitFor(() => expect(trigger).toHaveFocus())
+    noValueInPage()
+    expect(await m.revealSecret(DEV, 'JWT_SECRET')).not.toBe(VALUE) // skipped
+  })
+
+  test('replace: the toast says replaced, the existing value changed in the vault only', async () => {
+    const m = await withFile()
+    const { user } = await openHotenb(m)
+    const dialog = await previewFrom(user, screen.getByRole('button', { name: 'Import .env' }))
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Import 3 secrets' }))
+    expect(await screen.findByText('Imported 2 new, replaced 1')).toBeInTheDocument()
+    expect(await m.revealSecret(DEV, 'JWT_SECRET')).toBe(VALUE)
+    noValueInPage()
+  })
+
+  test('from an empty env: the empty state offers Import .env, then the table replaces it', async () => {
+    const m = await withFile()
+    await m.createEnvironment('p-hotenb', 'QA')
+    const { user } = await openHotenb(m)
+    await user.click(envButton('QA'))
+    expect(await screen.findByText('No secrets in QA yet')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Import .env' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Import .env file' })
+    await user.click(within(dialog).getByRole('button', { name: 'Choose file' }))
+    await within(dialog).findByText('3 new')
+    await user.click(within(dialog).getByRole('button', { name: 'Import 3 secrets' }))
+    await table('QA')
+    expect(rowNames()).toEqual(['JWT_SECRET', 'NEW_ONE', 'NEW_TWO'])
+    expect(screen.queryByText('No secrets in QA yet')).toBeNull()
+    expect(await screen.findByText('Imported 3 new')).toBeInTheDocument()
+    // the empty-state trigger is gone: focus lands on New secret
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New secret' })).toHaveFocus())
+    await waitFor(() => expect(envButton('QA')).toHaveAccessibleName('QA, 3 secrets'))
+  })
+
+  test('Cancel returns focus to the trigger and imports nothing', async () => {
+    const m = await withFile()
+    const { user } = await openHotenb(m)
+    const trigger = screen.getByRole('button', { name: 'Import .env' })
+    const dialog = await previewFrom(user, trigger)
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Import .env file' })).not.toBeInTheDocument())
+    await waitFor(() => expect(trigger).toHaveFocus())
+    expect(rowNames()).not.toContain('NEW_ONE')
+  })
+
+  test('locked mid-import: the unlock screen with the notice', async () => {
+    const m = await withFile()
+    const { user } = await openHotenb(m)
+    const dialog = await previewFrom(user, screen.getByRole('button', { name: 'Import .env' }))
+    m.__test.lockedByCli()
+    await user.click(within(dialog).getByRole('button', { name: 'Import 2 secrets' }))
+    await screen.findByRole('heading', { level: 1, name: 'Unlock your vault' })
+    expect(screen.getByRole('status')).toHaveTextContent('Your vault was locked while you were working.')
+    expect(screen.queryByRole('dialog', { name: 'Import .env file' })).not.toBeInTheDocument()
+    await user.keyboard(`${MOCK_PASSWORD}{Enter}`)
+    await table('Development')
+    expect(rowNames()).not.toContain('NEW_ONE')
   })
 })
