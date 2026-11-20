@@ -124,3 +124,80 @@ None at critical/serious level. Moderates below are accepted.
   960). Behaviour, motion and the real WKWebView rendering (Chromium only).
 - The `find-design-system` suggestion the tool appends: the product already
   has its design system (Better Design "linear" kit), so it was not re-opened.
+
+## Measurements
+
+Date: 2026-11-20. Same machine as the spike (Apple M1 Max, 32 GB, macOS 26.6.2),
+release build from `scripts/desktop-build.sh` (Wails v2.17.1, production mode,
+devtools off). Data dir: a scratch `SECRIO_HOME` with one vault, so the app
+opens on the unlock screen. Units: MiB = 2^20 bytes.
+
+Method (same as the spike): a Python wrapper records `time.time_ns()` right
+before `Popen` (no shell). For this measurement only, a temporary, uncommitted
+patch to `src/main.tsx` called `window.runtime.LogPrint(mark)` inside a double
+`requestAnimationFrame`: `PAINT_SHELL` right after the React mount (the spike's
+mark) and `PAINT_SCREEN` once the unlock form (first `input`) was in the DOM.
+Wails prints `LogPrint` on stderr; the wrapper timestamps the line on receipt
+(the spike used a bound `Painted()` call and a Go timestamp; both include the
+IPC trip). At +10 s: `ps -o rss=` and `footprint` (phys_footprint: private
+dirty + compressed memory, what Activity Monitor shows) for the app pid and the
+`com.apple.WebKit.*` pids that appeared after launch; then SIGTERM (exit 0 in
+every run). One discarded first launch after the build (Gatekeeper: 895 ms),
+then n = 10 runs. The patch was reverted and the app rebuilt before the checks
+below.
+
+| Metric (n = 10) | Min | Median | Max | Spike (v2, min of 5) |
+|---|---|---|---|---|
+| Launch to first paint (`PAINT_SHELL`) | 467 ms | 516 ms | 535 ms | 441 ms (441-536) |
+| Launch to unlock screen painted (`PAINT_SCREEN`) | 507 ms | 564 ms | 583 ms | n/a (empty page) |
+| Private memory, app + 3 WebKit helpers (footprint) | 84.3 MiB | 95.7 MiB | 97.7 MiB | not measured |
+| Private memory, app process only | 33.0 MiB | 33.9 MiB | 34.3 MiB | not measured |
+| RSS, app + 3 WebKit helpers | 205.0 MiB | 216.9 MiB | 218.3 MiB | 190.5 MiB |
+| RSS, app process only | 106.9 MiB | 113.3 MiB | 113.9 MiB | 108.0 MiB |
+
+Median per process (RSS / footprint): app 113.3 / 33.9; WebKit.WebContent
+58.1 / 35.9; WebKit.GPU 30.0 / 20.4; WebKit.Networking 15.1 / 5.7. The gap
+between RSS (217) and footprint (96) is shared pages: WebKit and system
+frameworks mapped in every WebKit app. WebContent grew most against the spike
+(37 -> 58 MiB RSS): it now holds the real UI (React, Base UI, 700 kB JS, fonts).
+
+Size:
+
+| | Bytes | MiB | Spike |
+|---|---|---|---|
+| Executable | 13,488,736 | 12.86 | 7.65 |
+| `.app` (all files) | 13,751,660 | 13.11 | 7.9 |
+| `frontend/dist` (embedded) | JS 699,831; CSS 60,050; 7 Inter woff2 (972 KiB on disk) | | |
+
+The +5.2 MiB against the spike is the Core (modernc SQLite in pure Go, crypto,
+keyring; the stripped CGO-free CLI alone is 9.08 MiB) plus about 1 MiB of
+frontend.
+
+Against the criteria (fast launch, low consumption): launch stays about half a
+second; the usable unlock screen paints in 0.51-0.58 s, about 75 ms (median)
+later than the spike's empty page. Memory: about 96 MiB private for app plus
+WebKit, 34 MiB for the Go process. Worse than the spike, as expected with a
+real UI and the Core, but in the same order.
+
+Shipped binary checks (after the clean rebuild):
+
+- Devtools off: `go version -m` shows tags `desktop,desktopapp,wv2runtime.download,production`
+  (no `devtools`, no `debug`) and ldflags `-w -s`; Wails sets
+  `developerExtrasEnabled` only when built with `devtools` (`IsDevtoolsEnabled`,
+  `internal/app/app_devtools*.go` in Wails). The build log says `Devtools false`.
+- Remote URLs in `dist` (JS, CSS, `index.html`), only never-fetched strings:
+  `http://www.w3.org/{2000/svg,1999/xlink,1998/Math/MathML,XML/1998/namespace}`
+  (XML namespaces in React DOM), `https://react.dev/errors/` and
+  `https://base-ui.com/production-error` (minified error text),
+  `https://tailwindcss.com` (CSS license banner). No protocol-relative URL;
+  `index.html` has none.
+- CSP meta present in `dist/index.html` (policy in architecture section 14).
+- Source maps: none (no `.map` file, no `sourceMappingURL` in dist or binary).
+- Mock: `__SECRIO_MOCK_BUNDLE__` (`MOCK_MARKER`), `createMockApi` and the seed
+  strings (`hotenb`, `correct horse`, `fake-jwt-signing-secret-0000`) are absent
+  from the JS and from the binary; `build:release` ran its 7 dist checks during
+  the build. The binary embeds this exact dist (`index-7aBUv6h5.js` found in it).
+- Signature: ad-hoc (`Signature=adhoc`), identifier `app.secrio.desktop`.
+
+Not measured: a 500-row secrets table (no seeded large vault), memory after
+use (only idle at +10 s), other machines or macOS versions.
