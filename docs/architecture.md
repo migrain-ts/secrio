@@ -284,7 +284,7 @@ Errors (`errors.go`): a failing method returns an `apiError` whose `Error()` is 
 
 ### Lock, close, session
 
-- `Lock` ends the current vault's Core session, then (deferred, on every path, errors included) clears our clipboard copy and the import state.
+- `Lock` ends the Core session of every vault this App unlocked plus the current one (switching vaults does not lock the one left, so Lock must cover them all; one failing or panicking vault does not skip the others), then (deferred, on every path, errors included) clears our clipboard copy and the import state. Locked vaults are no longer tracked, so a session the CLI opens afterwards survives `Shutdown`; a vault whose lock failed stays tracked (Shutdown retries it) and the first error is returned.
 - Close (window button, Cmd+Q, SIGTERM) runs Wails `OnShutdown` -> `App.Shutdown`: marks the App closed, locks every vault this App unlocked plus the current one, clears import state and our clipboard copy (even if locking panics). It never writes `desktop.json`. `OnBeforeClose` is not used: returning true would block close, Cmd+Q and SIGTERM.
 - Crash, SIGKILL, power loss: `OnShutdown` does not run. The Core session lives until idle (1 h) or TTL (12 h) expiry or `secrio lock`; a copied value stays on the clipboard.
 - `desktop.json` in the data dir: `{"lastVault": "<id>"}`, written atomically (temp file + rename, 0600); ignored if missing, corrupt, not a regular file or over 4 KiB; a failed write only loses the preference. Current vault = the in-memory selection, else `lastVault`, else the only vault.

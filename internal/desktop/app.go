@@ -278,8 +278,10 @@ func (a *App) Unlock(vaultID, password string) error {
 	return nil
 }
 
-// Lock ends the current vault's session and clears our clipboard copy (on
-// every path, errors included).
+// Lock ends the session of every vault this App unlocked plus the current
+// one, and clears our clipboard copy (on every path, errors included). Locked
+// ids stop being tracked, so a session the CLI opens later survives Shutdown;
+// an id whose lock fails stays tracked and its error is returned.
 func (a *App) Lock() error {
 	defer a.clearOurClipboard()
 	defer a.clearImportState()
@@ -288,14 +290,53 @@ func (a *App) Lock() error {
 		return err
 	}
 	ctx := context.Background()
-	e, ok, err := a.resolveCurrent(ctx, svc)
-	if err != nil {
-		return err
+	a.mu.Lock()
+	ids := make([]string, 0, len(a.unlocked)+1)
+	for id := range a.unlocked {
+		ids = append(ids, id)
+	}
+	a.mu.Unlock()
+	e, ok, curErr := a.resolveCurrent(ctx, svc)
+	if ok && !slices.Contains(ids, e.ID) {
+		ids = append(ids, e.ID)
+	}
+	var lockErr error
+	for _, id := range ids { // one failing vault must not skip the others
+		if err := a.lockTracked(ctx, svc, id); err != nil && lockErr == nil {
+			lockErr = err
+		}
+	}
+	if curErr != nil {
+		return curErr
 	}
 	if !ok {
 		return newAPIError(CodeNoVault, "no vault selected")
 	}
-	return toAPIError(svc.Lock(ctx, e.ID))
+	return toAPIError(lockErr)
+}
+
+// lockTracked locks id and stops tracking it; on failure (or a panic) it is
+// tracked again so Shutdown retries. Untracking first keeps a concurrent
+// Unlock of the same id tracked.
+func (a *App) lockTracked(ctx context.Context, svc *app.Service, id string) (err error) {
+	a.mu.Lock()
+	was := a.unlocked[id]
+	delete(a.unlocked, id)
+	a.mu.Unlock()
+	defer func() {
+		if r := recover(); r != nil {
+			err = newAPIError(CodeInternal, "unexpected error")
+		}
+		if err != nil && was {
+			a.mu.Lock()
+			if a.unlocked == nil {
+				a.unlocked = map[string]bool{}
+			}
+			a.unlocked[id] = true
+			a.mu.Unlock()
+		}
+	}()
+	return svc.Lock(ctx, id)
 }
 
 // SelectVault makes vaultID current and remembers it.

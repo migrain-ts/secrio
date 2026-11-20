@@ -26,6 +26,7 @@ type countingKeys struct {
 	failSave    atomic.Bool // Save fails
 	panicDelete atomic.Bool // Delete panics (a crash in the lock path)
 	onSave      func()      // runs at the start of Save; set before use
+	failDelete  string      // Delete fails for this vault id; set before use
 }
 
 func (c *countingKeys) Save(ctx context.Context, id string, k domain.Key) error {
@@ -41,6 +42,9 @@ func (c *countingKeys) Save(ctx context.Context, id string, k domain.Key) error 
 func (c *countingKeys) Delete(ctx context.Context, id string) error {
 	if c.panicDelete.Load() {
 		panic("injected")
+	}
+	if c.failDelete != "" && id == c.failDelete {
+		return errors.New("keychain unavailable")
 	}
 	return c.MemoryKeyStore.Delete(ctx, id)
 }

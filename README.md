@@ -12,7 +12,7 @@ Go 1.26, no CGO.
 
 ## Desktop app (macOS)
 
-A native window over the same vaults as the CLI (Wails v2, React). Unlock or create a vault, manage projects, environments and secrets, reveal a value for 10 s, copy it (cleared from the clipboard after 30 s, on Lock and on quit if it is still ours), import a `.env` file. Quitting locks the vault. The session is shared with the CLI. Design and limits: [docs/architecture.md](docs/architecture.md) section 14.
+A native window over the same vaults as the CLI (Wails v2, React). Unlock or create a vault, manage projects, environments and secrets, reveal a value for 10 s, copy it (cleared from the clipboard after 30 s, on Lock and on quit if it is still ours, when the clipboard can be read back), import a `.env` file. Lock and quitting lock every vault the app unlocked (quitting: not after a crash or kill). The session is shared with the CLI. Design and limits: [docs/architecture.md](docs/architecture.md) section 14.
 
 | Task | Command |
 |---|---|

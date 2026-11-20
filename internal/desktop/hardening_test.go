@@ -69,14 +69,9 @@ func TestLockPanicStillClears(t *testing.T) {
 	c := newClipEnv(t)
 	c.copy(t, "A", 30)
 	c.keys.panicDelete.Store(true)
-	func() {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("expected the injected panic")
-			}
-		}()
-		_ = c.app.Lock()
-	}()
+	if err := c.app.Lock(); err == nil || codeOf(t, err) != CodeInternal {
+		t.Fatalf("a panicking lock must be reported, got %v", err)
+	}
 	if c.clip.current() != "" {
 		t.Fatal("Lock must clear even when the lock path panics")
 	}
@@ -146,6 +141,64 @@ func TestShutdownLocksAllUnlockedVaults(t *testing.T) {
 		if !lockedViaOther(t, env, id) {
 			t.Fatalf("%s still unlocked", id)
 		}
+	}
+}
+
+func TestLockLocksAllUnlockedVaults(t *testing.T) {
+	env := newTestApp(t)
+	a := mustCreate(t, env, "alpha")
+	b := mustCreate(t, env, "beta") // current
+	if err := env.app.Lock(); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{a.ID, b.ID} {
+		if !lockedViaOther(t, env, id) {
+			t.Fatalf("%s still unlocked", id)
+		}
+	}
+}
+
+// After Lock the App no longer owns the sessions: one the CLI opens later
+// must survive Shutdown.
+func TestShutdownAfterLockKeepsExternalSession(t *testing.T) {
+	env := newTestApp(t)
+	a := mustCreate(t, env, "alpha")
+	b := mustCreate(t, env, "beta") // current
+	if err := env.app.Lock(); err != nil {
+		t.Fatal(err)
+	}
+	other, err := env.otherService()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Unlock(context.Background(), a.ID, []byte(testPassword), time.Hour, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	env.app.Shutdown()
+	if lockedViaOther(t, env, a.ID) {
+		t.Fatal("Shutdown ended a session the App did not open")
+	}
+	if !lockedViaOther(t, env, b.ID) {
+		t.Fatal("current vault must stay locked")
+	}
+}
+
+func TestLockFailureKeepsVaultTracked(t *testing.T) {
+	env := newTestApp(t)
+	a := mustCreate(t, env, "alpha")
+	b := mustCreate(t, env, "beta") // current
+	env.keys.failDelete = a.ID
+	if err := env.app.Lock(); err == nil || codeOf(t, err) != CodeInternal {
+		t.Fatalf("got %v", err)
+	}
+	env.app.mu.Lock()
+	trackedA, trackedB := env.app.unlocked[a.ID], env.app.unlocked[b.ID]
+	env.app.mu.Unlock()
+	if !trackedA || trackedB {
+		t.Fatalf("tracked alpha=%v beta=%v", trackedA, trackedB)
+	}
+	if !lockedViaOther(t, env, b.ID) {
+		t.Fatal("the other vault must still be locked")
 	}
 }
 
