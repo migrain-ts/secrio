@@ -134,7 +134,7 @@ export function Projects() {
             <p role="status" className="sr-only">
               Loading projects
             </p>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3">
+            <div className="grid grid-cols-1 gap-3">
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} className="h-[4.5rem] rounded-lg" />
               ))}
@@ -169,7 +169,7 @@ export function Projects() {
 
         {shown.length > 0 && (
           // role="list": list-style:none drops the implicit role in WebKit
-          <ul role="list" aria-label="Projects" className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3">
+          <ul role="list" aria-label="Projects" className="grid grid-cols-1 gap-3">
             {shown.map((p) => (
               <ProjectCard
                 key={p.id}
