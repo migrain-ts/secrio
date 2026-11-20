@@ -42,16 +42,24 @@ describe('importMachine: transitions', () => {
     expect(importMachine(applying, { type: 'STRATEGY', strategy: 'overwrite' }).strategy).toBe('skip')
   })
 
-  test('a conflict on apply re-previews the same path, keeps the strategy and the message', () => {
+  test('a conflict on apply re-previews the same path, keeps the message, resets the strategy to skip', () => {
     const s = run([{ type: 'STRATEGY', strategy: 'overwrite' }, { type: 'APPLY' }, { type: 'FAILED', error: 'conflict' }], atPreview)
-    expect(s).toMatchObject({ step: 'previewing', path: '/x/.env', strategy: 'overwrite', error: 'conflict', preview: null })
+    expect(s).toMatchObject({ step: 'previewing', path: '/x/.env', strategy: 'skip', error: 'conflict', preview: null })
     const fresh = { new: ['A'], duplicate: ['B', 'C'] }
     expect(importMachine(s, { type: 'PREVIEWED', preview: fresh })).toMatchObject({
       step: 'preview',
       preview: fresh,
       error: 'conflict',
-      strategy: 'overwrite',
+      strategy: 'skip',
     })
+  })
+
+  test('a conflict resets to skip even when the same duplicates come back', () => {
+    const s = run(
+      [{ type: 'STRATEGY', strategy: 'overwrite' }, { type: 'APPLY' }, { type: 'FAILED', error: 'conflict' }, { type: 'PREVIEWED', preview: PV }],
+      atPreview,
+    )
+    expect(s).toMatchObject({ step: 'preview', preview: PV, strategy: 'skip' })
   })
 
   test('another apply error keeps the strategy and the path', () => {

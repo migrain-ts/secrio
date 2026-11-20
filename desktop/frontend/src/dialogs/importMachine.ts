@@ -48,9 +48,10 @@ export function importMachine(s: ImportState, e: ImportEvent): ImportState {
     case 'APPLIED':
       return { ...s, step: 'done' }
     case 'FAILED':
-      // The file or the vault changed: preview the same file again.
+      // The file or the vault changed: preview the same file again, back on
+      // the safe choice, so an overwrite of the new set is a fresh decision.
       if (e.error === 'conflict' && s.step === 'applying') {
-        return { ...s, step: 'previewing', preview: null, error: 'conflict' }
+        return { ...s, step: 'previewing', preview: null, strategy: 'skip', error: 'conflict' }
       }
       return { ...s, step: 'error', error: e.error }
     case 'REPREVIEW':

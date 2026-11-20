@@ -55,6 +55,7 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
   const req = useRef(0) // the only request whose answer may land
   const applyingRef = useRef(false) // a double click lands before the re-render
   const primaryRef = useRef<HTMLButtonElement>(null)
+  const strategyRef = useRef<HTMLFieldSetElement>(null)
 
   useEffect(
     () => () => {
@@ -63,11 +64,16 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
     [],
   )
 
-  // Focus the primary action of each step the user acts on.
+  // Focus the primary action of each step the user acts on. After a conflict
+  // with existing names, focus the (reset) strategy instead: Enter must not be
+  // one key away from an overwrite the user has not reviewed.
   const { step } = s
+  const conflictChoice = step === 'preview' && s.error === 'conflict' && (s.preview?.duplicate.length ?? 0) > 0
   useEffect(() => {
-    if (open && (step === 'idle' || step === 'preview' || step === 'error')) primaryRef.current?.focus()
-  }, [open, step])
+    if (!open || !(step === 'idle' || step === 'preview' || step === 'error')) return
+    const checked = conflictChoice ? strategyRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') : null
+    ;(checked ?? primaryRef.current)?.focus()
+  }, [open, step, conflictChoice])
 
   function close() {
     req.current++
@@ -178,7 +184,7 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
               {pv.new.length > 0 && <NameList id="import-new" title="Will be added" names={pv.new} />}
               {dupes > 0 && <NameList id="import-dupes" title={`Already in ${envName}`} names={pv.duplicate} />}
               {dupes > 0 && (
-                <fieldset className="flex flex-col gap-2">
+                <fieldset ref={strategyRef} className="flex flex-col gap-2">
                   <legend id="import-strategy" className="mb-2 text-sm font-medium text-foreground">
                     Existing secrets
                   </legend>

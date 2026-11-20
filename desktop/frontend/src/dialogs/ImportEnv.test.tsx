@@ -249,16 +249,34 @@ describe('ImportEnv: apply', () => {
     expect(items(dialog, 'Already in Staging')).toEqual(['NEW_ONE', 'SENTRY_DSN'])
     expect(onImported).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    // the choice is kept; nothing new was written
-    expect(within(dialog).getByRole('radio', { name: 'Replace existing' })).toBeChecked()
+    // back to the safe choice, focused (Enter is not one key away from an overwrite); nothing written
+    const skip = within(dialog).getByRole('radio', { name: 'Skip existing' })
+    expect(skip).toBeChecked()
+    await waitFor(() => expect(skip).toHaveFocus())
+    expect(within(dialog).queryByText(/will be replaced/)).toBeNull()
+    expect(btn(dialog, 'Import 1 secret')).toBeInTheDocument()
     expect((await m.listSecrets(ENV)).map((s) => s.name)).not.toContain('NEW_TWO')
     expect(apply).toHaveBeenCalledTimes(1)
+    // an informed choice again
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    expect(within(dialog).getByText(/Values of 2 existing secrets will be replaced/)).toBeInTheDocument()
     await user.click(btn(dialog, 'Import 3 secrets'))
     await waitFor(() => expect(onImported).toHaveBeenCalledWith({ imported: 1, replaced: 2, skipped: 0 }))
     expect((await m.listSecrets(ENV)).map((s) => s.name)).toContain('NEW_TWO')
   })
 
-  test('conflict after the file changed, and a re-preview that fails shows its own error', async () => {
+  test('a conflict with no duplicates left: focus on the primary', async () => {
+    const m = mockWithFile({ NEW_ONE: VALUE })
+    const { user, dialog } = await setup(m)
+    await toPreview(user, dialog)
+    m.__test.setFileContent(MOCK_IMPORT_PATH, { NEW_ONE: VALUE, NEW_TWO: VALUE }) // the file changed
+    await user.click(btn(dialog, 'Import 1 secret'))
+    expect(await within(dialog).findByText('2 new')).toBeInTheDocument()
+    expect(within(dialog).getByText('The file or the vault changed. Review the new preview.')).toBeInTheDocument()
+    await waitFor(() => expect(btn(dialog, 'Import 2 secrets')).toHaveFocus())
+  })
+
+  test('the file vanished before apply: its own error, the dialog stays usable', async () => {
     const m = mockWithFile()
     const { user, dialog } = await setup(m)
     await toPreview(user, dialog)
@@ -266,6 +284,35 @@ describe('ImportEnv: apply', () => {
     await user.click(btn(dialog, 'Import 2 secrets'))
     expect(await within(dialog).findByText('That file could not be found.')).toBeInTheDocument()
     expect(btn(dialog, 'Choose another file')).toBeEnabled()
+  })
+
+  test('conflict, then the automatic re-preview fails: fixed copy, usable, nothing applied', async () => {
+    const m = mockWithFile()
+    m.__test.setFileContent('/other/.env', { OTHER_NAME: VALUE })
+    let previews = 0
+    const apply = vi.fn(() => Promise.reject(new ApiError('conflict', `server says ${VALUE}`)))
+    const { user, dialog, onImported } = await setup({
+      ...m,
+      applyImport: apply,
+      previewImport: (env, path) =>
+        ++previews === 2 ? Promise.reject(new ApiError('invalid_value', 'server text')) : m.previewImport(env, path),
+    })
+    await toPreview(user, dialog)
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(btn(dialog, 'Import 3 secrets'))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      "This file has an entry Secrio can't import, or it is too large.",
+    )
+    expect(dialog).not.toHaveTextContent('server')
+    expect(previews).toBe(2)
+    expect(apply).toHaveBeenCalledTimes(1)
+    expect(onImported).not.toHaveBeenCalled()
+    expect((await m.listSecrets(ENV)).map((s) => s.name)).not.toContain('NEW_ONE')
+    noValue()
+    await waitFor(() => expect(btn(dialog, 'Try again')).toHaveFocus())
+    m.__test.setPickResult('/other/.env')
+    await user.click(btn(dialog, 'Choose another file'))
+    expect(await within(dialog).findByText('1 new')).toBeInTheDocument()
   })
 })
 
