@@ -43,11 +43,17 @@ export function Projects() {
   const deletedRef = useRef(false)
 
   // A refresh keeps the current list on screen until the new one arrives.
+  // Only the latest request may land (a create and a delete can overlap).
+  const req = useRef(0)
   const load = useCallback(async () => {
+    const id = ++req.current
     try {
-      setProjects(await api.listProjects())
+      const ps = await api.listProjects()
+      if (id !== req.current) return
+      setProjects(ps)
       setFailed(false)
     } catch (e) {
+      if (id !== req.current) return
       // locked/no_vault: the guarded api already moved to another screen.
       if (e instanceof ApiError && (e.code === 'locked' || e.code === 'no_vault')) return
       setFailed(true)
@@ -65,8 +71,8 @@ export function Projects() {
     toast({ title: 'Project deleted' })
   }
 
-  const q = query.toLowerCase()
-  const shown = projects?.filter((p) => p.name.toLowerCase().includes(q)) ?? []
+  const q = query.toLocaleLowerCase()
+  const shown = projects?.filter((p) => p.name.toLocaleLowerCase().includes(q)) ?? []
   const empty = projects !== null && projects.length === 0
 
   const newButton = (
@@ -186,6 +192,7 @@ export function Projects() {
         onOpenChange={setCreating}
         finalFocus={newRef}
         onCreated={() => {
+          setQuery('') // an active search could hide the new project
           void load()
           toast({ title: 'Project created' })
         }}

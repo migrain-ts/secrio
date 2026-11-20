@@ -243,8 +243,8 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
     toast({ title: 'Environment deleted' })
   }
 
-  const q = query.toLowerCase()
-  const shown = secrets?.filter((s) => s.name.toLowerCase().includes(q)) ?? []
+  const q = query.toLocaleLowerCase()
+  const shown = secrets?.filter((s) => s.name.toLocaleLowerCase().includes(q)) ?? []
   const hasSecrets = secrets !== null && secrets.length > 0
 
   const newSecretButton = (

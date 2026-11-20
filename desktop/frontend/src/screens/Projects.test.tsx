@@ -194,6 +194,51 @@ describe('Projects: create', () => {
     expect(announced.closest('[aria-live="polite"]')).not.toBeNull()
   })
 
+  test('creating clears an active search so the new project is visible', async () => {
+    const { user } = renderApp(createMockApi())
+    await list()
+    await user.type(search(), 'infra')
+    expect(cardNames()).toEqual(['infra'])
+    await user.click(newButton())
+    await screen.findByRole('dialog', { name: 'New project' })
+    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveFocus())
+    await user.keyboard('billing{Enter}')
+    await waitFor(() => expect(cardNames()).toContain('billing'))
+    expect(search()).toHaveValue('')
+  })
+
+  test('a stale list answer that lands last is dropped', async () => {
+    const m = createMockApi()
+    const pending: ((ps: ProjectDTO[]) => void)[] = []
+    const listProjects = vi.fn(() => new Promise<ProjectDTO[]>((r) => pending.push(r)))
+    const zeta: ProjectDTO = { id: 'p-z', name: 'zeta', envCount: 0, secretCount: 0 }
+    const { user } = renderApp({
+      ...m,
+      listProjects,
+      createProject: vi.fn(async () => zeta),
+      deleteProject: vi.fn(async () => {}),
+    })
+    await waitFor(() => expect(pending).toHaveLength(1))
+    pending[0](FIXTURE)
+    await list()
+    await user.click(newButton())
+    await screen.findByRole('dialog', { name: 'New project' })
+    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveFocus())
+    await user.keyboard('zeta{Enter}')
+    await waitFor(() => expect(pending).toHaveLength(2))
+    // a delete's refresh starts while the create's refresh is still out
+    await user.click(screen.getByRole('button', { name: 'Project actions for cdn' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete project' }))
+    await screen.findByRole('alertdialog', { name: 'Delete this project?' })
+    await user.type(screen.getByLabelText('Type cdn to confirm'), 'cdn{Enter}')
+    await waitFor(() => expect(pending).toHaveLength(3))
+    pending[2]([...FIXTURE.slice(0, 2), zeta]) // the newest answer first
+    await waitFor(() => expect(cardNames()).toEqual(['billing', 'Api-Gateway', 'zeta']))
+    pending[1]([...FIXTURE, zeta]) // then the stale one, which still has cdn
+    await new Promise((r) => setTimeout(r, 20))
+    expect(cardNames()).toEqual(['billing', 'Api-Gateway', 'zeta'])
+  })
+
   test('duplicate stays inline in the dialog', async () => {
     const { user } = renderApp(createMockApi())
     await list()
