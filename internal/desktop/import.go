@@ -144,7 +144,7 @@ func readEnvFile(path string) ([]importexport.Entry, error) {
 	switch {
 	case err == nil:
 		return entries, nil
-	case errors.Is(err, domain.ErrUnsupportedValue):
+	case errors.Is(err, domain.ErrUnsupportedValue): // dotenv: only the 8 MiB cap
 		return nil, newAPIError(CodeInvalidValue, "the file is too large")
 	case errors.Is(err, domain.ErrUnsupportedFormat), errors.Is(err, domain.ErrInvalidName):
 		return nil, newAPIError(CodeInvalidValue, "the file contains an invalid entry")

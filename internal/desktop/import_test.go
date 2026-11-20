@@ -261,6 +261,9 @@ func TestFileOverCap(t *testing.T) {
 	f.pick(t, p)
 	_, err := f.env.app.PreviewImport(f.eid, p)
 	wantCode(t, err, CodeInvalidValue)
+	if !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("got %v", err)
+	}
 }
 
 func TestMissingAndDirectory(t *testing.T) {
