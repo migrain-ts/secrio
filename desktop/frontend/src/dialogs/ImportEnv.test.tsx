@@ -52,11 +52,8 @@ const items = (d: HTMLElement, name: string) => within(list(d, name)).getAllByRo
 
 async function toPreview(user: ReturnType<typeof userEvent.setup>, d: HTMLElement) {
   await user.click(btn(d, 'Choose file'))
-  await waitFor(() => expect(primaryOf(d).textContent).toMatch(/^Import \d|^Close$/))
+  await waitFor(() => expect(primaryOf(d).textContent).toMatch(/^Import \d|^Done$/))
 }
-
-/** The footer's "Close" (the corner X is named "Close" too, but is an icon). */
-const footerClose = (d: HTMLElement) => primaryOf(d)
 
 /** The last footer button: the primary action of the step. */
 function primaryOf(d: HTMLElement): HTMLElement {
@@ -139,7 +136,7 @@ describe('ImportEnv: preview', () => {
     expect(btn(dialog, 'Import 1 secret')).toBeInTheDocument()
   })
 
-  test('nothing new to import: "Close" closes without importing', async () => {
+  test('nothing new to import: "Done" closes without importing', async () => {
     const m = mockWithFile({ SENTRY_DSN: VALUE, LOG_LEVEL: VALUE })
     const apply = vi.spyOn(m, 'applyImport')
     const { user, dialog, onImported } = await setup(m)
@@ -150,7 +147,9 @@ describe('ImportEnv: preview', () => {
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Values of 2 existing secrets will be replaced.')
     expect(btn(dialog, 'Import 2 secrets')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('radio', { name: 'Skip existing' }))
-    await user.click(footerClose(dialog))
+    // one button named "Close" (the corner X); the footer says "Done"
+    expect(within(dialog).getAllByRole('button', { name: 'Close' })).toHaveLength(1)
+    await user.click(btn(dialog, 'Done'))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(apply).not.toHaveBeenCalled()
     expect(onImported).not.toHaveBeenCalled()
@@ -228,6 +227,7 @@ describe('ImportEnv: apply', () => {
     expect(within(dialog).getByRole('radio', { name: 'Replace existing' })).toHaveAttribute('aria-disabled', 'true')
     expect(btn(dialog, 'Choose another file')).toBeDisabled()
     expect(btn(dialog, 'Cancel')).toBeDisabled()
+    expect(btn(dialog, 'Close')).toBeDisabled() // the corner X too
     await user.keyboard('{Escape}')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     await act(async () => gate.resolve())

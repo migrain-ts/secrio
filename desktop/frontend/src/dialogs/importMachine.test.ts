@@ -37,6 +37,14 @@ describe('importMachine: transitions', () => {
     expect(importMachine(applying, { type: 'APPLIED' }).step).toBe('done')
   })
 
+  test.each<ImportState['step']>(['idle', 'picking', 'previewing', 'applying', 'error'])(
+    'APPLY is ignored outside the preview (%s)',
+    (step) => {
+      const s: ImportState = { ...atPreview, step }
+      expect(importMachine(s, { type: 'APPLY' })).toBe(s)
+    },
+  )
+
   test('strategy changes are ignored outside the preview', () => {
     const applying = importMachine(atPreview, { type: 'APPLY' })
     expect(importMachine(applying, { type: 'STRATEGY', strategy: 'overwrite' }).strategy).toBe('skip')
@@ -102,8 +110,8 @@ describe('importMachine: copy and counts', () => {
     [PV, 'overwrite', 3, 'Import 3 secrets'],
     [{ new: ['A'], duplicate: ['B'] }, 'skip', 1, 'Import 1 secret'],
     [{ new: [], duplicate: ['B'] }, 'overwrite', 1, 'Import 1 secret'],
-    [{ new: [], duplicate: ['B'] }, 'skip', 0, 'Close'],
-    [{ new: [], duplicate: [] }, 'skip', 0, 'Close'],
+    [{ new: [], duplicate: ['B'] }, 'skip', 0, 'Done'],
+    [{ new: [], duplicate: [] }, 'skip', 0, 'Done'],
   ])('importCount/importLabel %j %s', (pv, strategy, n, label) => {
     expect(importCount(pv, strategy)).toBe(n)
     expect(importLabel(pv, strategy)).toBe(label)

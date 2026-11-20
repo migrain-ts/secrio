@@ -43,13 +43,16 @@ export function importMachine(s: ImportState, e: ImportEvent): ImportState {
       return { ...s, step: 'preview', preview: e.preview }
     case 'STRATEGY':
       return s.step === 'preview' ? { ...s, strategy: e.strategy } : s
-    case 'APPLY':
-      return { ...s, step: 'applying', error: null }
+    case 'APPLY': // only a reviewed preview can be applied
+      return s.step === 'preview' ? { ...s, step: 'applying', error: null } : s
     case 'APPLIED':
       return { ...s, step: 'done' }
     case 'FAILED':
       // The file or the vault changed: preview the same file again, back on
       // the safe choice, so an overwrite of the new set is a fresh decision.
+      // Other errors go to `error`, where the dialog hides the old lists and
+      // radios on purpose: "Try again" re-previews, so the user never acts
+      // on counts that may no longer be true.
       if (e.error === 'conflict' && s.step === 'applying') {
         return { ...s, step: 'previewing', preview: null, strategy: 'skip', error: 'conflict' }
       }
@@ -90,10 +93,11 @@ export function importCount(pv: ImportPreview, strategy: ImportStrategy): number
   return pv.new.length + (strategy === 'overwrite' ? pv.duplicate.length : 0)
 }
 
-/** The primary button: "Import N secrets", or "Close" when nothing would change. */
+/** The primary button: "Import N secrets", or "Done" when nothing would change
+ *  (not "Close": the corner X already has that name). */
 export function importLabel(pv: ImportPreview, strategy: ImportStrategy): string {
   const n = importCount(pv, strategy)
-  if (n === 0) return 'Close'
+  if (n === 0) return 'Done'
   return `Import ${n} ${n === 1 ? 'secret' : 'secrets'}`
 }
 

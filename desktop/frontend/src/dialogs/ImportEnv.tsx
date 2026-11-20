@@ -158,7 +158,12 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
         else if (!applyingRef.current) close()
       }}
     >
-      <DialogContent initialFocus={primaryRef} finalFocus={finalFocus} className="max-w-[32rem]">
+      <DialogContent
+        initialFocus={primaryRef}
+        finalFocus={finalFocus}
+        closeDisabled={applying}
+        className="max-w-[32rem]"
+      >
         <div className="flex min-w-0 flex-col gap-4" aria-busy={busy}>
           <DialogHeader>
             <DialogTitle>Import .env file</DialogTitle>
