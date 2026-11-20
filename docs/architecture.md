@@ -228,7 +228,7 @@ Layering rule: `internal/desktop` imports `core`, `app` (and `app/importexport`)
 
   `ListVaults`, `CreateVault`, `Unlock`, `Lock`, `SelectVault`, `CurrentVault`, `ListProjects`, `CreateProject`, `DeleteProject`, `ListEnvironments`, `CreateEnvironment`, `DeleteEnvironment`, `ListSecrets`, `SaveSecret`, `DeleteSecret`, `RevealSecret`, `CopySecret`, `PickEnvFile`, `PreviewImport`, `ApplyImport` (20).
 - Wails v2 drops methods with three results, so `API.CurrentVault` packs `App.CurrentVault`'s `(VaultDTO, bool, error)` into `CurrentVaultDTO`.
-- Adding a bound method: a forwarder in `api.go`, its name in the allowlist in `api_test.go`, then regenerate the bindings.
+- Adding a bound method: a forwarder in `api.go`, its name in the allowlist in `api_test.go`, then regenerate the bindings (`TestBindingsMatchAPI` fails while `wailsjs/go/desktop/API.d.ts` does not export exactly the `API` methods).
 
 DTOs (`dto.go`; none carries a value):
 

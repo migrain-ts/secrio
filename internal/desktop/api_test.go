@@ -1,7 +1,9 @@
 package desktop
 
 import (
+	"os"
 	"reflect"
+	"regexp"
 	"slices"
 	"testing"
 )
@@ -48,6 +50,23 @@ func TestAPIMethodSetIsAllowlist(t *testing.T) {
 	}
 	if slices.Contains(got, "Shutdown") {
 		t.Fatal("Shutdown must not be bound")
+	}
+}
+
+// The committed bindings must export exactly the bound methods, so a change
+// to API cannot ship with stale JS.
+func TestBindingsMatchAPI(t *testing.T) {
+	b, err := os.ReadFile("../../desktop/frontend/wailsjs/go/desktop/API.d.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range regexp.MustCompile(`(?m)^export function (\w+)\(`).FindAllStringSubmatch(string(b), -1) {
+		got = append(got, m[1])
+	}
+	slices.Sort(got)
+	if want := exportedMethods(reflect.TypeFor[*API]()); !slices.Equal(got, want) {
+		t.Fatalf("wailsjs bindings export %v, API has %v: run scripts/desktop-bindings.sh", got, want)
 	}
 }
 
