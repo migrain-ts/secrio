@@ -4,7 +4,7 @@ Keep this file current: any change to layers, storage, key handling or error sem
 
 ## 1. Purpose
 
-secrio is a local secrets manager. Secrets (name, value, type, description) are grouped as vault > project > environment > secret and stored in one encrypted SQLite file per vault. The core is a Go library (`internal/`); the CLI (`secrio`, section 13) is a front end on top of it, and the Desktop app will be another. No network, no CGO, no server.
+secrio is a local secrets manager. Secrets (name, value, type, description) are grouped as vault > project > environment > secret and stored in one encrypted SQLite file per vault. The core is a Go library (`internal/`); the CLI (`secrio`, section 13) and the macOS Desktop app (section 14) are front ends on top of it. No network, no server; the core and CLI need no CGO (only the Wails desktop shell does, behind a build tag).
 
 ## 2. Layers and dependency rule
 
@@ -35,6 +35,9 @@ domain  <-  app  <-  core (composition root)  ->  infra/*
 | `core` | `New`, options, `DefaultDataDir`, `VaultPath` |
 | `cmd/secrio` | The CLI binary: `main` only calls `cli.Execute(cli.RealDeps(), os.Args[1:])` and exits with its code |
 | `cli` (`internal/cli`) | Cobra command layer: one file per command, all I/O through `Deps`, no business logic; imports `core`, `app` and `domain`, never `infra` (section 13) |
+| `desktop` (`internal/desktop`) | Desktop facade: `App` (open per call, error codes, clipboard, import) and the bound allowlist `API`; imports `core`, `app`, `domain`, never `infra`, Wails or `cli` (section 14) |
+| `cmd/secrio-desktop` | The Wails v2 shell (`//go:build desktopapp`, CGO): `main.go`, clipboard/dialog adapters, `wails.json` |
+| `desktop/` | `assets.go` (package `desktopassets`, tag-guarded `//go:embed all:frontend/dist`) and `frontend/` (React + TypeScript + Vite app) |
 | `tests` | Black-box end-to-end and security tests through `core.New`, plus tests of the real `secrio` binary |
 
 `core.New(dataDir, opts...)` creates `dataDir` (0700) and builds: `crypto.Suite{}` as cipher and KDF, `sqlite.Opener{}`, `registry.New(dataDir)`, `keychain.New("secrio")`, `clock.System{}`, `crypto.DefaultKDFParams()`. Options: `WithKDFParams`, `WithSessionKeys`, `WithClock`. `VaultPath(dataDir, name)` returns `<dataDir>/vaults/<name>.db` (vaults dir 0700) and rejects empty names, `/`, `\`, `..` and NUL.
@@ -169,7 +172,7 @@ Both front ends:
 2. Create vaults at `core.VaultPath(dir, name)`, then `Unlock`, `Open` (or `OpenWithPassword` for one-shot use), call `Unlocked` methods, and `Close` the handle.
 3. Map the errors in section 7 to messages and exit codes; they never import `internal/infra`.
 
-CLI `run` = `Open` + `ProcessEnv(os.Environ())` + `os/exec`, propagating the child's exit code (details in section 13). Desktop keeps a long-lived `Service` and calls `Lock` on demand, but must not keep a long-lived `Unlocked`: an open handle ignores `Lock`, TTL and idle expiry (section 6) and does not refresh `LastUsed`, so it calls `Open` per operation or short burst and closes the handle right after. The CLI exists (section 13); the Desktop does not yet.
+CLI `run` = `Open` + `ProcessEnv(os.Environ())` + `os/exec`, propagating the child's exit code (details in section 13). Desktop keeps a long-lived `Service` and calls `Lock` on demand, but must not keep a long-lived `Unlocked`: an open handle ignores `Lock`, TTL and idle expiry (section 6) and does not refresh `LastUsed`, so it calls `Open` per operation or short burst and closes the handle right after. Both exist: CLI in section 13, Desktop in section 14.
 
 ## 13. CLI
 
@@ -195,3 +198,148 @@ Exit codes (outside `run`): 0 success; 1 any other error; 2 usage error (`ExitEr
 Known limits (also in the README): Two concurrent `vault create` runs can leave an orphaned vault file: the registry is last-writer-wins across processes. A project or environment provided by `.secrio.toml` cannot be cleared from the command line: an empty `--project ""` counts as unset and the file's value applies. Vault, project and environment names cannot contain control characters (newline, ESC, ...). Vault names that differ only by case are refused on every OS, because macOS and Windows file systems would make their files collide, so `vault create` refuses a name that differs from an existing one only by case; reserved Windows names (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`, also with an extension) and `..` inside a name are refused everywhere. `SECRIO_PASSWORD` exported in a shell profile costs one Argon2id run (about a second and 256 MiB of memory) for every command that has no session. The `.secrio.toml` ownership check runs on the symlink target (`os.Stat` follows links), so a symlink in a directory someone else controls can point at one of your own valid context files; only link-following hardening (open plus fstat) would close that TOCTOU gap.
 
 What the CLI deliberately does not do: put values, passwords or keys in argv, errors or logs; prompt without a terminal; offer import, export, edit, delete, history, compare or change-password commands (the library supports them, no command exists yet); read a value from a flag or argument; keep a long-lived `Unlocked` (each command opens, works and closes); import `internal/infra`.
+
+## 14. Desktop
+
+A macOS app on Wails v2 (v2.17.1; choice in `docs/superpowers/notes/2026-11-19-wails-spike.md`). Go owns the vault; the webview only shows metadata and the one value the user asks to reveal.
+
+### Layout and layering
+
+```
+webview (React)  --Wails IPC-->  desktop.API (allowlist)  ->  desktop.App  ->  core / app / domain
+                                 bound in cmd/secrio-desktop/main.go (desktopapp tag)
+```
+
+| Piece | File(s) | Role |
+|---|---|---|
+| Shell | `cmd/secrio-desktop/main.go` | `wails.Run`: window 1280x800 (min 960x600), background `rgb(8 9 10)` (same as `index.html`), `Bind: desktop.NewAPI(a)`, `OnStartup` keeps the Wails ctx, `OnShutdown` calls `a.Shutdown()`. Data dir: `SECRIO_HOME`, else `core.DefaultDataDir()` (the CLI rule) |
+| Adapters | `cmd/secrio-desktop/adapters.go` | `desktop.Clipboard` and `desktop.Dialogs` over the Wails runtime; they refuse to run before `OnStartup` (Wails would `log.Fatal` on a nil ctx) |
+| Assets | `desktop/assets.go` | `//go:embed all:frontend/dist` behind `desktopapp`, so untagged builds work without a built frontend |
+| Facade | `internal/desktop/*.go` | `App` (all logic) and `API` (what JS can call) |
+| Frontend | `desktop/frontend/` | Vite app; Wails bindings in `wailsjs/` (generated, committed) |
+
+Layering rule: `internal/desktop` imports `core`, `app` (and `app/importexport`) and `domain`, never `infra`, Wails or `cli` (`TestImportGuard`). Only `cmd/secrio-desktop` imports Wails, and only under the `desktopapp` tag (`TestDesktopMainBuildTagOnly`: untagged `secrio/...` has no Wails dependency).
+
+### Facade contract
+
+- Open per call: every data method runs `withVault`, which resolves the current vault, calls `Service.Open`, does the work and always `Close`s the handle (section 6: a handle ignores `Lock` and expiry). The `Service` is created once and kept.
+- `Unlock` and `CreateVault` open a Core session with TTL 12 h and idle 1 h (`sessionTTL`, `sessionIdle` in `deps.go`). The session is shared with the CLI: `secrio lock` locks the app too.
+- Wails binds every exported method of a bound struct, so the shell binds `API` (`api.go`), which forwards this exact allowlist and nothing else (`TestAPIMethodSetIsAllowlist`; `App.Shutdown` is not reachable from JS):
+
+  `ListVaults`, `CreateVault`, `Unlock`, `Lock`, `SelectVault`, `CurrentVault`, `ListProjects`, `CreateProject`, `DeleteProject`, `ListEnvironments`, `CreateEnvironment`, `DeleteEnvironment`, `ListSecrets`, `SaveSecret`, `DeleteSecret`, `RevealSecret`, `CopySecret`, `PickEnvFile`, `PreviewImport`, `ApplyImport` (20).
+- Wails v2 drops methods with three results, so `API.CurrentVault` packs `App.CurrentVault`'s `(VaultDTO, bool, error)` into `CurrentVaultDTO`.
+- Adding a bound method: a forwarder in `api.go`, its name in the allowlist in `api_test.go`, then regenerate the bindings.
+
+DTOs (`dto.go`; none carries a value):
+
+| DTO | JSON fields |
+|---|---|
+| `VaultDTO` | `id`, `name` |
+| `CurrentVaultDTO` | `vault` (`id` "" = none), `unlocked` |
+| `ProjectDTO` | `id`, `name`, `envCount`, `secretCount` |
+| `EnvDTO` | `id`, `name`, `secretCount` |
+| `SecretDTO` | `name`, `type`, `description`, `createdAt`, `updatedAt` (RFC3339 UTC) |
+| `CopyResult` | `clearInSeconds` (0 = will not be cleared) |
+| `ImportPreview` | `new`, `duplicate` (names only) |
+
+Errors (`errors.go`): a failing method returns an `apiError` whose `Error()` is JSON `{"code","message"}`; the promise rejects with it and `src/api/errors.ts` parses it into an `ApiError`. Messages are fixed texts, never names, paths, values or passwords; unknown errors become `internal` / "unexpected error".
+
+| Code | From |
+|---|---|
+| `locked` | `ErrLocked`; an unlock or copy that finishes after `Shutdown` |
+| `invalid_password` | `ErrInvalidPassword` |
+| `not_found` | `ErrNotFound`; unreadable import file |
+| `duplicate` | `ErrDuplicate`; vault name taken (case-insensitive) |
+| `invalid_name` | `ErrInvalidName`; bad vault or secret name |
+| `invalid_value` | `ErrInvalidArgument`, `ErrUnsupportedValue`; empty, too long or NUL value, bad type, empty password, bad import strategy or file, path not picked |
+| `conflict` | import applied without a preview, or file/environment changed since the preview |
+| `unsupported` | no clipboard or dialog adapter |
+| `no_vault` | no current vault |
+| `internal` | `ErrCorrupt`, `ErrUnsupportedFormat`, anything else |
+
+### Values
+
+- `ListSecrets` returns metadata only and clears the decrypted values right away.
+- `RevealSecret` is the only method that returns a value (a Go string, which cannot be zeroed). The UI keeps it in one piece of state (`hooks/useReveal.ts`) for 10 s (`REVEAL_MS`) and drops it on selection or env change, window blur or hide, edit/copy/delete, or unmount (lock).
+- `CopySecret` writes the clipboard in Go; the value never reaches JS.
+- `SaveSecret(envID, name, value, typ)` receives the typed value from JS: create or update; empty `typ` keeps the existing type (else `text`); an update keeps the description. Values: non-empty, at most 1 MiB, no NUL. Edit loads the current value with `RevealSecret` into the masked field, because `SaveSecret` needs a value.
+- "New secret" rejects a name that already exists, checked against the loaded list and a fresh `listSecrets` at submit time (`SaveSecret` itself is create-or-update).
+
+### Clipboard (`clipboard.go`)
+
+- After a copy, Go reads the clipboard back and keeps only the SHA-256 of our copy, never the text.
+- It clears the clipboard only if it still holds our copy (same hash): 30 s after the copy (`clearAfter`), on `Lock` and on `Shutdown`. A newer copy replaces the timer.
+- If the clipboard cannot be read back, the copy stays and is never cleared by us (`clearInSeconds` 0; the toast says so).
+- A copy that finishes after `Shutdown` is refused (`locked`) before writing.
+- Not covered: SIGKILL or a crash (no `OnShutdown`; the timer dies with the process); clipboard managers keep their own history.
+
+### Import (`import.go`)
+
+- `PickEnvFile` opens the native dialog and remembers the returned path (at most 16). `PreviewImport` and `ApplyImport` refuse any other path (`invalid_value`), so the webview cannot make Go read arbitrary files.
+- The path must be a regular file, parsed as dotenv (8 MiB cap in `importexport`); errors are fixed texts without line numbers.
+- Stateless hash: `PreviewImport` stores only a SHA-256 of the sorted new and duplicate name sets (at most 16 previews). `ApplyImport` re-reads the file and the environment and imports only if the hash still matches; otherwise `conflict` and nothing is imported. The UI then re-previews and resets the strategy to Skip.
+- Strategy `skip` or `overwrite` (one Core transaction).
+- macOS dialog: no file filter (Wails cannot express `.env` / `.env.*` there); other platforms get `.env;*.env;.env.*` plus All files. Hidden files are shown.
+- `Lock` and `Shutdown` forget picked paths and previews.
+
+### Lock, close, session
+
+- `Lock` ends the current vault's Core session, then (deferred, on every path, errors included) clears our clipboard copy and the import state.
+- Close (window button, Cmd+Q, SIGTERM) runs Wails `OnShutdown` -> `App.Shutdown`: marks the App closed, locks every vault this App unlocked plus the current one, clears import state and our clipboard copy (even if locking panics). It never writes `desktop.json`. `OnBeforeClose` is not used: returning true would block close, Cmd+Q and SIGTERM.
+- Crash, SIGKILL, power loss: `OnShutdown` does not run. The Core session lives until idle (1 h) or TTL (12 h) expiry or `secrio lock`; a copied value stays on the clipboard.
+- `desktop.json` in the data dir: `{"lastVault": "<id>"}`, written atomically (temp file + rename, 0600); ignored if missing, corrupt, not a regular file or over 4 KiB; a failed write only loses the preference. Current vault = the in-memory selection, else `lastVault`, else the only vault.
+- Never poll: `CurrentVault` calls `Service.Open`, which refreshes the session idle timer. The UI calls it only at boot, after user actions and on window focus (at most once per 2 s, `FOCUS_CHECK_MIN_MS`); there is no timer. A poll would keep the vault unlocked forever.
+
+### Frontend (`desktop/frontend/src`)
+
+| Area | Files | Notes |
+|---|---|---|
+| API | `api/client.ts`, `select.ts`, `errors.ts`, `types.ts`, `mock.ts`, `mock-guard.ts` | `client.ts` is the only way to Go; it never imports `wailsjs/runtime` |
+| State | `state/machine.ts`, `state/AppProvider.tsx` | Pure reducer over screens `boot`, `fatal`, `unlock`, `create-vault`, `projects`, `project`. `AppProvider` wraps every api method in a guard: `locked` -> unlock screen with an "interrupted" notice, back to the same screen after unlock; `no_vault` -> unlock or create vault |
+| Screens | `screens/` | `Unlock`, `CreateVault`, `Projects`, `Project` (env sidebar, secrets table, detail panel), `Fatal` |
+| Dialogs | `dialogs/` | `NewProject`, `NewEnv`, `SecretForm`, `ConfirmDelete` (type-to-confirm when data would be lost), `ImportEnv` + `importMachine.ts` |
+| Kit | `components/ui/`, `components/icons/`, `index.css` | Better Design `linear` kit (shadcn + Base UI), pruned to the components used; inline Iconoir icons; Inter self-hosted |
+
+Mock API (`api/mock.ts`): an in-memory `Api` with the facade's rules and codes, for the browser dev server (`VITE_MOCK_API=1 pnpm dev`) and as the test double. `select.ts` allows it only when `import.meta.env.DEV` or mode `test`; a production bundle without bindings gets an api that always rejects, and the app shows the fatal screen, never the mock. The mock is loaded by dynamic import, so production tree-shakes it. `vite.config.ts` refuses a build in test/development mode, with `NODE_ENV` other than `production`, or with `VITE_MOCK_API` set. `build:release` (what `wails build` runs) checks the dist afterwards (`src/assets.test.ts`: no mock markers, nothing remote, fonts bundled, CSP kept).
+
+Local patches to the generated kit (a kit regeneration would revert them; reapply):
+
+| File | Patch |
+|---|---|
+| `components/ui/dropdown-menu.tsx` | `useDataOpen` takes the element (callback ref) instead of a ref object: the portal mounts the popup one render late, so the menu opened empty |
+| `components/ui/field.tsx` | `announce` prop (error with `role="alert"`) and the `fieldDescribedBy` helper (aria-describedby) |
+| `components/ui/button.tsx`, `card.tsx`, `empty.tsx` | Drop shadows removed (review gate: shadows only on overlays) |
+| `components/ui/dialog.tsx` | Corner X is a 32 px target; `closeDisabled` prop (disabled while an import applies) |
+| `components/ui/dropdown-menu.tsx`, `select.tsx` | `@iconify/react` (runtime fetch from api.iconify.design) replaced by inline Iconoir icons (`components/icons/`) |
+| `index.css` | `--destructive-text` (readable red text on dark surfaces); `--font-sans` = self-hosted Inter, no Google Fonts import; `--sidebar-*` mapped to linear tokens |
+
+### Webview security
+
+- CSP meta in `index.html`: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'`. Wails injects `/wails/ipc.js` and `/wails/runtime.js` from its own origin before the meta; no header CSP is set.
+- No remote content: fonts and icons are bundled. The only URL strings left in the bundle are never fetched: XML namespaces, React and Base UI error links, the Tailwind banner.
+- Release builds: no devtools (no `-debug` / `-devtools`; build tags `desktop,desktopapp,wv2runtime.download,production`), no source maps.
+
+### Build, bindings, packaging
+
+| Task | Command |
+|---|---|
+| Release `.app` | `scripts/desktop-build.sh` -> `desktop/build/bin/secrio-desktop.app` (`wails build -tags desktopapp -m -nosyncgomod` in `cmd/secrio-desktop`; Wails runs `pnpm run build:release`) |
+| Bindings | `scripts/desktop-bindings.sh` (`wails generate module -tags desktopapp`); `desktop/frontend/wailsjs` is committed |
+| Frontend checks | `cd desktop/frontend && pnpm test && pnpm build` (`pnpm test:dist` = release build + dist checks) |
+| Dev in a browser | `cd desktop/frontend && VITE_MOCK_API=1 pnpm dev` |
+
+- Needs CGO and the Xcode command line tools. The tag keeps `CGO_ENABLED=0 go build ./...` and `go vet ./...` free of Wails. Both scripts create `desktop/frontend/dist/.keep` first (the embed fails without `dist`).
+- `-m -nosyncgomod`: no `go mod tidy`, no rewrite of the Wails version. Pin the CLI to v2.17.1.
+- Ad-hoc signed only (no Developer ID, no notarisation). macOS only.
+
+### Known limits
+
+- The master password and every typed value pass through JS memory (and a Go string) and cannot be zeroed; so does a revealed value.
+- Reveal window: 10 s on screen. Copy window: 30 s on the clipboard (see Clipboard for what is not covered).
+- The hidden value field is a textarea masked with `-webkit-text-security`: its text can still be selected and copied, and screen readers read it.
+- No history, compare, settings, export or rename in the UI (the Core has history, compare and export).
+- A secret created (e.g. by the CLI) between the UI's fresh name check and `saveSecret` is overwritten; follow-up: a create-only flag in the facade/Core `SetSecret`.
+- Core zeroing debt: `GetSecret` / `SetSecret` decrypt every secret of the environment and do not clear the ones not returned; import plans keep value copies the facade cannot clear.
+- macOS file dialog has no filter (any file can be picked; the facade validates it).
+- The UI review rendered the dev build in Chromium, not WKWebView.
+- No lock on crash or SIGKILL (see Lock).

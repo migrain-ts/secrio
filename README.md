@@ -10,14 +10,31 @@ go build -o secrio ./cmd/secrio
 
 Go 1.26, no CGO.
 
-### Desktop app (macOS, in progress)
+## Desktop app (macOS)
 
-```sh
-scripts/desktop-build.sh      # -> desktop/build/bin/secrio-desktop.app
-scripts/desktop-bindings.sh   # regenerate desktop/frontend/wailsjs after changing desktop.API or a DTO
-```
+A native window over the same vaults as the CLI (Wails v2, React). Unlock or create a vault, manage projects, environments and secrets, reveal a value for 10 s, copy it (cleared from the clipboard after 30 s, on Lock and on quit if it is still ours), import a `.env` file. Quitting locks the vault. The session is shared with the CLI. Design and limits: [docs/architecture.md](docs/architecture.md) section 14.
 
-Needs the Wails v2 CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1`), CGO with the Xcode command line tools, Node and pnpm. The Wails shell lives in `cmd/secrio-desktop` behind the `desktopapp` build tag, so plain `go build ./...` stays CGO-free. Only the methods of `internal/desktop.API` are callable from the webview. The generated TypeScript bindings in `desktop/frontend/wailsjs` are committed. Frontend checks: `cd desktop/frontend && pnpm test`.
+| Task | Command |
+|---|---|
+| Build | `scripts/desktop-build.sh` -> `desktop/build/bin/secrio-desktop.app` |
+| Run | `open desktop/build/bin/secrio-desktop.app` (uses `SECRIO_HOME` like the CLI when started from a shell: `SECRIO_HOME=... desktop/build/bin/secrio-desktop.app/Contents/MacOS/secrio-desktop`) |
+| Dev in a browser, fake data | `cd desktop/frontend && VITE_MOCK_API=1 pnpm dev` |
+| Frontend tests | `cd desktop/frontend && pnpm test` (`pnpm test:dist`: release build + bundle checks) |
+| Go tests | `go test ./...` (the facade `internal/desktop` needs no CGO) |
+| Bindings | `scripts/desktop-bindings.sh` after changing `internal/desktop.API` or a DTO (`desktop/frontend/wailsjs` is committed) |
+
+Needs the Wails v2 CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1`), CGO with the Xcode command line tools, Node and pnpm. The Wails shell lives in `cmd/secrio-desktop` behind the `desktopapp` build tag, so plain `go build ./...` stays CGO-free. Only the methods of `internal/desktop.API` are callable from the webview. The app is ad-hoc signed only.
+
+Measured on an M1 Max, macOS 26.6, release build, 10 launches ([method](docs/superpowers/notes/2026-11-19-desktop-review.md#measurements)):
+
+| | Median (min-max) |
+|---|---|
+| Launch to first paint | 516 ms (467-535); unlock screen painted 564 ms (507-583) |
+| Idle memory at +10 s, private (phys_footprint, app + 3 WebKit helpers) | 95.7 MiB (84.3-97.7); the app process alone 33.9 MiB |
+| Idle memory at +10 s, RSS (includes shared WebKit pages) | 216.9 MiB (205.0-218.3) |
+| Size | executable 12.9 MiB, `.app` 13.1 MiB |
+
+Third-party notices for the shipped frontend (Inter font, UI kit, libraries): [desktop/frontend/THIRD_PARTY_NOTICES.md](desktop/frontend/THIRD_PARTY_NOTICES.md).
 
 ## Quick start
 
@@ -94,7 +111,7 @@ Under `run`, secrio's own failures before the command starts (including a locked
 
 ## Current limits
 
-No import, export, edit or delete command yet, and no desktop app. `unlock` needs a working OS keychain; other commands can use `SECRIO_PASSWORD` without one.
+The CLI has no import, export, edit or delete command yet (the desktop app can import, edit and delete; neither has history, compare or export). `unlock` needs a working OS keychain; other commands can use `SECRIO_PASSWORD` without one.
 
 - Two concurrent `vault create` runs can leave an orphaned vault file: the registry is last-writer-wins across processes.
 - A project or environment provided by `.secrio.toml` cannot be cleared from the command line: an empty `--project ""` counts as unset and the file's value applies.
