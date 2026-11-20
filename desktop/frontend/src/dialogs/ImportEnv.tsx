@@ -18,7 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Radio } from '@base-ui/react/radio'
+import { RadioGroup } from '@/components/ui/radio-group'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   countsLine,
@@ -274,12 +275,18 @@ function NameList({ id, title, names }: { id: string; title: string; names: stri
   )
 }
 
+/** The whole row is the radio (circle + label): a 32 px target, not the
+ *  16 px circle alone (review gate). Named by its text. */
 function StrategyOption({ value, label }: { value: ImportStrategy; label: string }) {
-  const id = `import-strategy-${value}`
   return (
-    <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-foreground">
-      <RadioGroupItem value={value} aria-labelledby={id} />
-      <span id={id}>{label}</span>
-    </label>
+    <Radio.Root
+      value={value}
+      className="-mx-2 flex min-h-8 w-fit cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-foreground outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring data-disabled:cursor-not-allowed data-disabled:opacity-50"
+    >
+      <span aria-hidden className="grid size-4 shrink-0 place-items-center rounded-full border border-primary">
+        <Radio.Indicator className="size-2.5 rounded-full bg-primary" />
+      </span>
+      {label}
+    </Radio.Root>
   )
 }
