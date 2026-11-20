@@ -24,8 +24,11 @@ export function SecretDetail({ secret: s, reveal, onCopy, onEdit, onDelete }: Pr
         <p className="pt-8 text-center text-sm text-muted-foreground">Select a secret to see its details.</p>
       ) : (
         <Card className="flex flex-col gap-4 p-4">
-          <h2 className="break-all font-mono text-sm font-medium text-foreground">{s.name}</h2>
-          {s.description && <p className="-mt-2 text-sm text-muted-foreground">{s.description}</p>}
+          {/* name + description as one block: the card keeps a single 16 px gap */}
+          <div className="flex flex-col gap-1">
+            <h2 className="break-all font-mono text-sm font-medium text-foreground">{s.name}</h2>
+            {s.description && <p className="text-sm text-muted-foreground">{s.description}</p>}
+          </div>
 
           <section className="flex flex-col gap-2">
             <h3 className="text-xs font-medium text-muted-foreground">Value</h3>

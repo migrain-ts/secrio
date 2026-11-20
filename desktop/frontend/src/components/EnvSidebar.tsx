@@ -22,7 +22,7 @@ interface Props {
 
 export function EnvSidebar({ envs, currentId, onSelect, onNew, onDelete, newRef }: Props) {
   return (
-    <Sidebar className="w-56 shrink-0">
+    <Sidebar className="w-[var(--layout-sidebar)] shrink-0">
       <nav aria-label="Environments" className="flex min-h-0 flex-1 flex-col">
         <div className="flex h-11 items-center justify-between pl-4 pr-2">
           <h2 className="text-xs font-medium text-muted-foreground">Environments</h2>
@@ -80,7 +80,8 @@ function EnvItem({
         aria-label={`${env.name}, ${plural(env.secretCount)}`}
         title={env.name}
         onClick={() => onSelect(env.id)}
-        className="h-9 pr-16"
+        // symmetric padding; the name stops before the count + actions slot
+        className="h-9 px-3 [&>span]:max-w-[calc(100%-3.25rem)]"
       />
       {/* trailing slot: fixed width, right-aligned count */}
       <span
