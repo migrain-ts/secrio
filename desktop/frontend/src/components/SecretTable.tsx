@@ -49,19 +49,22 @@ export function SecretTable({ envName, secrets, selected, onSelect, onAction, bo
   }, [bodyRef])
 
   return (
-    <Table aria-label={`Secrets in ${envName}`} className="table-fixed">
+    // Narrow windows (min 960 px) drop Value (always the same dots) and
+    // Updated (shown in the detail panel) so Name keeps its room; the
+    // min width stops Name from ever collapsing (the area scrolls instead).
+    <Table aria-label={`Secrets in ${envName}`} className="min-w-[24rem] table-fixed">
       <TableHeader className="sticky top-0 z-10 bg-background">
         <TableRow className="hover:bg-transparent">
           <TableHead scope="col" className="h-9 px-3">
             Name
           </TableHead>
-          <TableHead scope="col" className="h-9 w-32 px-3">
+          <TableHead scope="col" className="hidden h-9 w-32 px-3 xl:table-cell">
             Value
           </TableHead>
           <TableHead scope="col" className="h-9 w-28 px-3">
             Type
           </TableHead>
-          <TableHead scope="col" className="h-9 w-32 px-3">
+          <TableHead scope="col" className="hidden h-9 w-32 px-3 xl:table-cell">
             Updated
           </TableHead>
           <TableHead scope="col" className="h-9 w-[8.5rem] px-3">
@@ -124,7 +127,7 @@ const SecretRow = memo(
         <TableCell className="truncate px-3 py-1.5 font-mono text-[0.8125rem] text-foreground" title={s.name}>
           {s.name}
         </TableCell>
-        <TableCell className="px-3 py-1.5 text-muted-foreground">
+        <TableCell className="hidden px-3 py-1.5 text-muted-foreground xl:table-cell">
           <span aria-hidden="true" className="tracking-widest">
             {MASK}
           </span>
@@ -133,7 +136,7 @@ const SecretRow = memo(
         <TableCell className="px-3 py-1.5">
           <Badge>{TYPE_LABELS[s.type] ?? s.type}</Badge>
         </TableCell>
-        <TableCell className="whitespace-nowrap px-3 py-1.5 text-muted-foreground tabular-nums">
+        <TableCell className="hidden whitespace-nowrap px-3 py-1.5 text-muted-foreground tabular-nums xl:table-cell">
           <time dateTime={s.updatedAt} title={s.updatedAt}>
             {shortDate(s.updatedAt)}
           </time>

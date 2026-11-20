@@ -31,6 +31,7 @@ import {
   INITIAL,
   summary,
 } from '@/dialogs/importMachine'
+import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppProvider'
 
 /** Names shown per list; the rest is "and K more". */
@@ -167,9 +168,8 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
         <div className="flex min-w-0 flex-col gap-4" aria-busy={busy}>
           <DialogHeader>
             <DialogTitle>Import .env file</DialogTitle>
-            <DialogDescription>
-              Choose a .env file. You'll see which names will be added before anything changes.
-            </DialogDescription>
+            {/* before a file is chosen; later the counts and the primary say it */}
+            {step === 'idle' && <DialogDescription>Nothing changes until you confirm.</DialogDescription>}
           </DialogHeader>
 
           {s.error && (
@@ -179,7 +179,15 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
             </Alert>
           )}
 
-          <p role="status" className="flex items-center gap-2 text-sm text-foreground tabular-nums empty:hidden">
+          {/* Announces the counts; on screen each list heading shows its own
+              count, so the preview says it once (comprehension review). */}
+          <p
+            role="status"
+            className={cn(
+              'flex items-center gap-2 text-sm text-foreground tabular-nums empty:hidden',
+              pv && !applying && pv.new.length + pv.duplicate.length > 0 && 'sr-only',
+            )}
+          >
             {(step === 'previewing' || applying) && <Spinner label={null} className="size-4" />}
             {status}
           </p>
@@ -199,8 +207,8 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
                     disabled={applying}
                     onValueChange={(v) => dispatch({ type: 'STRATEGY', strategy: v as ImportStrategy })}
                   >
-                    <StrategyOption value="skip" label="Skip existing" />
-                    <StrategyOption value="overwrite" label="Replace existing" />
+                    <StrategyOption value="skip" label="Skip" />
+                    <StrategyOption value="overwrite" label="Replace" />
                   </RadioGroup>
                 </fieldset>
               )}
@@ -209,13 +217,10 @@ export function ImportEnv({ open, onOpenChange, envId, envName, onImported, fina
                   <WarningCircleIcon aria-hidden className="size-4" />
                   <AlertDescription>
                     {dupes === 1
-                      ? "Values of 1 existing secret will be replaced. This can't be undone."
-                      : `Values of ${dupes} existing secrets will be replaced. This can't be undone.`}
+                      ? 'Replaces 1 value permanently.'
+                      : `Replaces ${dupes} values permanently.`}
                   </AlertDescription>
                 </Alert>
-              )}
-              {nothingToDo && pv.duplicate.length > 0 && (
-                <p className="text-sm text-muted-foreground">Nothing new to import.</p>
               )}
             </>
           )}
@@ -248,9 +253,13 @@ function NameList({ id, title, names }: { id: string; title: string; names: stri
   const rest = names.length - MAX_LISTED
   return (
     <div className="flex flex-col gap-1.5">
-      <h3 id={id} className="text-xs font-medium text-muted-foreground">
-        {title}
-      </h3>
+      <div className="flex items-baseline gap-1.5 text-xs font-medium text-muted-foreground">
+        <h3 id={id}>{title}</h3>
+        {/* the status line announces the counts */}
+        <span aria-hidden="true" className="tabular-nums">
+          {names.length}
+        </span>
+      </div>
       <ScrollArea className="rounded-md bg-secondary/40 [&_[data-slot=scroll-area-viewport]]:max-h-36">
         <ul aria-labelledby={id} className="flex flex-col gap-1 px-3 py-2">
           {names.slice(0, MAX_LISTED).map((n) => (

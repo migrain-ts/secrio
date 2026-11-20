@@ -93,11 +93,11 @@ export function importCount(pv: ImportPreview, strategy: ImportStrategy): number
   return pv.new.length + (strategy === 'overwrite' ? pv.duplicate.length : 0)
 }
 
-/** The primary button: "Import N secrets", or "Done" when nothing would change
- *  (not "Close": the corner X already has that name). */
+/** The primary button: "Import N secrets", or "Close without importing" when
+ *  nothing would change (names its outcome; distinct from the corner "Close"). */
 export function importLabel(pv: ImportPreview, strategy: ImportStrategy): string {
   const n = importCount(pv, strategy)
-  if (n === 0) return 'Done'
+  if (n === 0) return 'Close without importing'
   return `Import ${n} ${n === 1 ? 'secret' : 'secrets'}`
 }
 

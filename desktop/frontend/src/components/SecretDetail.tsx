@@ -19,7 +19,7 @@ interface Props {
 
 export function SecretDetail({ secret: s, reveal, onCopy, onEdit, onDelete }: Props) {
   return (
-    <aside aria-label="Secret details" className="w-80 shrink-0 overflow-y-auto border-l border-border p-4">
+    <aside aria-label="Secret details" className="w-72 shrink-0 overflow-y-auto border-l border-border p-4 xl:w-80">
       {s === null ? (
         <p className="pt-8 text-center text-sm text-muted-foreground">Select a secret to see its details.</p>
       ) : (

@@ -110,8 +110,8 @@ describe('importMachine: copy and counts', () => {
     [PV, 'overwrite', 3, 'Import 3 secrets'],
     [{ new: ['A'], duplicate: ['B'] }, 'skip', 1, 'Import 1 secret'],
     [{ new: [], duplicate: ['B'] }, 'overwrite', 1, 'Import 1 secret'],
-    [{ new: [], duplicate: ['B'] }, 'skip', 0, 'Done'],
-    [{ new: [], duplicate: [] }, 'skip', 0, 'Done'],
+    [{ new: [], duplicate: ['B'] }, 'skip', 0, 'Close without importing'],
+    [{ new: [], duplicate: [] }, 'skip', 0, 'Close without importing'],
   ])('importCount/importLabel %j %s', (pv, strategy, n, label) => {
     expect(importCount(pv, strategy)).toBe(n)
     expect(importLabel(pv, strategy)).toBe(label)

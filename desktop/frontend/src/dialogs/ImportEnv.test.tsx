@@ -52,7 +52,7 @@ const items = (d: HTMLElement, name: string) => within(list(d, name)).getAllByRo
 
 async function toPreview(user: ReturnType<typeof userEvent.setup>, d: HTMLElement) {
   await user.click(btn(d, 'Choose file'))
-  await waitFor(() => expect(primaryOf(d).textContent).toMatch(/^Import \d|^Done$/))
+  await waitFor(() => expect(primaryOf(d).textContent).toMatch(/^Import \d|^Close without importing$/))
 }
 
 /** The last footer button: the primary action of the step. */
@@ -76,7 +76,7 @@ describe('ImportEnv: idle', () => {
   test('named and described, the primary "Choose file" has focus', async () => {
     const { dialog } = await setup()
     expect(dialog).toHaveAccessibleDescription(
-      "Choose a .env file. You'll see which names will be added before anything changes.",
+      'Nothing changes until you confirm.',
     )
     await waitFor(() => expect(btn(dialog, 'Choose file')).toHaveFocus())
   })
@@ -111,15 +111,15 @@ describe('ImportEnv: preview', () => {
     const { user, dialog } = await setup()
     await toPreview(user, dialog)
     const group = within(dialog).getByRole('radiogroup', { name: 'Existing secrets' })
-    const skip = within(group).getByRole('radio', { name: 'Skip existing' })
-    const replace = within(group).getByRole('radio', { name: 'Replace existing' })
+    const skip = within(group).getByRole('radio', { name: 'Skip' })
+    const replace = within(group).getByRole('radio', { name: 'Replace' })
     expect(skip).toBeChecked()
     expect(replace).not.toBeChecked()
     expect(within(dialog).queryByRole('alert')).toBeNull()
     await user.click(replace)
     expect(replace).toBeChecked()
     expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      "Values of 1 existing secret will be replaced. This can't be undone.",
+      'Replaces 1 value permanently.',
     )
     expect(btn(dialog, 'Import 3 secrets')).toBeEnabled()
     await user.click(skip)
@@ -136,20 +136,20 @@ describe('ImportEnv: preview', () => {
     expect(btn(dialog, 'Import 1 secret')).toBeInTheDocument()
   })
 
-  test('nothing new to import: "Done" closes without importing', async () => {
+  test('nothing new to import: "Close without importing" closes', async () => {
     const m = mockWithFile({ SENTRY_DSN: VALUE, LOG_LEVEL: VALUE })
     const apply = vi.spyOn(m, 'applyImport')
     const { user, dialog, onImported } = await setup(m)
     await toPreview(user, dialog)
     expect(within(dialog).getByText('No new names, 2 already exist')).toBeInTheDocument()
-    expect(within(dialog).getByText('Nothing new to import.')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
-    expect(within(dialog).getByRole('alert')).toHaveTextContent('Values of 2 existing secrets will be replaced.')
+    expect(within(dialog).queryByText('Nothing new to import.')).toBeNull() // said once, by the counts
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Replaces 2 values permanently.')
     expect(btn(dialog, 'Import 2 secrets')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('radio', { name: 'Skip existing' }))
-    // one button named "Close" (the corner X); the footer says "Done"
+    await user.click(within(dialog).getByRole('radio', { name: 'Skip' }))
+    // one button named "Close" (the corner X); the footer names its outcome
     expect(within(dialog).getAllByRole('button', { name: 'Close' })).toHaveLength(1)
-    await user.click(btn(dialog, 'Done'))
+    await user.click(btn(dialog, 'Close without importing'))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(apply).not.toHaveBeenCalled()
     expect(onImported).not.toHaveBeenCalled()
@@ -179,7 +179,7 @@ describe('ImportEnv: preview', () => {
     m.__test.setFileContent('/other/.env', { OTHER_NAME: VALUE })
     const { user, dialog } = await setup(m)
     await toPreview(user, dialog)
-    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace' }))
     m.__test.setPickResult('/other/.env')
     await user.click(btn(dialog, 'Choose another file'))
     expect(await within(dialog).findByText('1 new')).toBeInTheDocument()
@@ -206,7 +206,7 @@ describe('ImportEnv: apply', () => {
     const apply = vi.spyOn(m, 'applyImport')
     const { user, dialog, onImported } = await setup(m)
     await toPreview(user, dialog)
-    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace' }))
     await user.click(btn(dialog, 'Import 3 secrets'))
     await waitFor(() => expect(onImported).toHaveBeenCalledWith({ imported: 2, replaced: 1, skipped: 0 }))
     expect(apply).toHaveBeenCalledWith(ENV, MOCK_IMPORT_PATH, 'overwrite')
@@ -224,7 +224,7 @@ describe('ImportEnv: apply', () => {
     expect(apply).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(primary).toBeDisabled())
     expect(within(dialog).getByRole('status')).toHaveTextContent('Importing')
-    expect(within(dialog).getByRole('radio', { name: 'Replace existing' })).toHaveAttribute('aria-disabled', 'true')
+    expect(within(dialog).getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-disabled', 'true')
     expect(btn(dialog, 'Choose another file')).toBeDisabled()
     expect(btn(dialog, 'Cancel')).toBeDisabled()
     expect(btn(dialog, 'Close')).toBeDisabled() // the corner X too
@@ -240,7 +240,7 @@ describe('ImportEnv: apply', () => {
     const apply = vi.spyOn(m, 'applyImport')
     const { user, dialog, onImported } = await setup(m)
     await toPreview(user, dialog)
-    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace' }))
     // the vault changed: NEW_ONE now exists
     await m.saveSecret(ENV, 'NEW_ONE', 'other', 'text')
     await user.click(btn(dialog, 'Import 3 secrets'))
@@ -250,16 +250,16 @@ describe('ImportEnv: apply', () => {
     expect(onImported).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     // back to the safe choice, focused (Enter is not one key away from an overwrite); nothing written
-    const skip = within(dialog).getByRole('radio', { name: 'Skip existing' })
+    const skip = within(dialog).getByRole('radio', { name: 'Skip' })
     expect(skip).toBeChecked()
     await waitFor(() => expect(skip).toHaveFocus())
-    expect(within(dialog).queryByText(/will be replaced/)).toBeNull()
+    expect(within(dialog).queryByText(/^Replaces /)).toBeNull()
     expect(btn(dialog, 'Import 1 secret')).toBeInTheDocument()
     expect((await m.listSecrets(ENV)).map((s) => s.name)).not.toContain('NEW_TWO')
     expect(apply).toHaveBeenCalledTimes(1)
     // an informed choice again
-    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
-    expect(within(dialog).getByText(/Values of 2 existing secrets will be replaced/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace' }))
+    expect(within(dialog).getByText(/Replaces 2 values/)).toBeInTheDocument()
     await user.click(btn(dialog, 'Import 3 secrets'))
     await waitFor(() => expect(onImported).toHaveBeenCalledWith({ imported: 1, replaced: 2, skipped: 0 }))
     expect((await m.listSecrets(ENV)).map((s) => s.name)).toContain('NEW_TWO')
@@ -298,7 +298,7 @@ describe('ImportEnv: apply', () => {
         ++previews === 2 ? Promise.reject(new ApiError('invalid_value', 'server text')) : m.previewImport(env, path),
     })
     await toPreview(user, dialog)
-    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace' }))
     await user.click(btn(dialog, 'Import 3 secrets'))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       "This file has an entry Secrio can't import, or it is too large.",
@@ -340,7 +340,7 @@ describe('ImportEnv: errors', () => {
       applyImport: () => Promise.reject(new ApiError(code, `server says ${VALUE}`)),
     })
     await toPreview(user, dialog)
-    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace' }))
     await user.click(btn(dialog, 'Import 3 secrets'))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Import failed. Try again.')
     expect(dialog).not.toHaveTextContent('server says')
@@ -348,7 +348,7 @@ describe('ImportEnv: errors', () => {
     // the choice survives "Try again"
     await user.click(btn(dialog, 'Try again'))
     await within(dialog).findByText('2 new, 1 already exists')
-    expect(within(dialog).getByRole('radio', { name: 'Replace existing' })).toBeChecked()
+    expect(within(dialog).getByRole('radio', { name: 'Replace' })).toBeChecked()
   })
 
   test('a failing picker: generic copy and "Choose file" again', async () => {
@@ -415,11 +415,11 @@ describe('ImportEnv: keyboard', () => {
     await user.keyboard('{Enter}')
     await waitFor(() => expect(btn(dialog, 'Import 2 secrets')).toHaveFocus())
     // reach the radios with Shift+Tab, move with the arrows
-    const skip = within(dialog).getByRole('radio', { name: 'Skip existing' })
+    const skip = within(dialog).getByRole('radio', { name: 'Skip' })
     for (let i = 0; i < 10 && document.activeElement !== skip; i++) await user.tab({ shift: true })
     expect(skip).toHaveFocus()
     await user.keyboard('{ArrowDown}')
-    expect(within(dialog).getByRole('radio', { name: 'Replace existing' })).toBeChecked()
+    expect(within(dialog).getByRole('radio', { name: 'Replace' })).toBeChecked()
     expect(within(dialog).getByRole('alert')).toBeInTheDocument()
     // back to the primary with Tab, then Space
     const primary = btn(dialog, 'Import 3 secrets')
