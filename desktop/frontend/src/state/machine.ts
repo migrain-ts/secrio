@@ -60,12 +60,14 @@ export function reducer(state: AppState, ev: AppEvent): AppState {
         : { kind: 'unlock', vaultId: ev.vaultId }
       return { screen, returnTo }
     }
+    // A late answer must not move the user away from another screen.
     case 'UNLOCKED': {
+      if (state.screen.kind !== 'unlock') return state
       const back = state.returnTo?.vaultId === ev.vaultId ? state.returnTo.screen : PROJECTS
       return { screen: back, returnTo: null }
     }
     case 'VAULT_CREATED':
-      return { screen: PROJECTS, returnTo: null }
+      return state.screen.kind === 'create-vault' ? { screen: PROJECTS, returnTo: null } : state
     case 'OPEN_PROJECT':
       return { ...state, screen: { kind: 'project', projectId: ev.projectId, envId: ev.envId ?? null } }
     case 'OPEN_PROJECTS':

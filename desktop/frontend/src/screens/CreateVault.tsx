@@ -143,6 +143,7 @@ export function CreateVault() {
             type="button"
             variant="ghost"
             className="w-full"
+            disabled={busy}
             onClick={() => dispatch({ type: 'GOTO_UNLOCK', vaultId: null })}
           >
             Back to unlock

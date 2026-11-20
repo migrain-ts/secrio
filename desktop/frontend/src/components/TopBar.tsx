@@ -11,11 +11,15 @@ import { useApp } from '@/state/AppProvider'
 export function TopBar() {
   const { api, vault, vaults, screen, dispatch, syncVault } = useApp()
   const [busy, setBusy] = useState(false)
-  const [lockFailed, setLockFailed] = useState(false)
+  // The screen the lock failed on: the alert shows only there, so it does
+  // not follow the user to the next screen.
+  const [failedOn, setFailedOn] = useState<typeof screen | null>(null)
+  const lockFailed = failedOn === screen
 
   async function lock() {
+    if (busy) return // a double click sends one lock
     setBusy(true)
-    setLockFailed(false)
+    setFailedOn(null)
     try {
       await api.lock()
     } catch (e) {
@@ -24,7 +28,7 @@ export function TopBar() {
       const closed = e instanceof ApiError && (e.code === 'locked' || e.code === 'no_vault')
       if (!closed) {
         setBusy(false)
-        setLockFailed(true)
+        setFailedOn(screen)
         return
       }
     }

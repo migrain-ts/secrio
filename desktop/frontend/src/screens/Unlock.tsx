@@ -37,15 +37,17 @@ export function Unlock({ vaultId, notice }: { vaultId: string | null; notice?: N
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (busy) return
-    const typed = password
-    setPassword('')
     setPasswordError(null)
     setVaultError(null)
     setFormError(null)
     if (!target) {
+      // nothing was submitted: keep the typed password, point at the select
       setVaultError('Choose a vault.')
+      document.getElementById('unlock-vault')?.focus()
       return
     }
+    const typed = password
+    setPassword('')
     if (typed === '') {
       setPasswordError('Enter your password.')
       passwordRef.current?.focus()
@@ -122,7 +124,7 @@ export function Unlock({ vaultId, notice }: { vaultId: string | null; notice?: N
             )}
           </div>
         )}
-        <Field label="Password" htmlFor="unlock-password" error={passwordError ?? undefined}>
+        <Field label="Password" htmlFor="unlock-password" error={passwordError ?? undefined} announce>
           <Input
             ref={passwordRef}
             id="unlock-password"
@@ -143,7 +145,13 @@ export function Unlock({ vaultId, notice }: { vaultId: string | null; notice?: N
           {busy && <Spinner label={null} className="size-4" />}
           Unlock
         </Button>
-        <Button type="button" variant="ghost" className="w-full" onClick={() => dispatch({ type: 'GOTO_CREATE_VAULT' })}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full"
+          disabled={busy}
+          onClick={() => dispatch({ type: 'GOTO_CREATE_VAULT' })}
+        >
           Create a new vault
         </Button>
       </form>

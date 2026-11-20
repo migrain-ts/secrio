@@ -56,6 +56,20 @@ describe('reducer', () => {
       { type: 'UNLOCKED', vaultId: 'v2' },
       at({ kind: 'projects' }),
     ],
+    // a late answer must not teleport the user from another screen
+    ['UNLOCKED off the unlock screen is ignored', at(project), { type: 'UNLOCKED', vaultId: 'v1' }, at(project)],
+    [
+      'UNLOCKED on create-vault is ignored',
+      at({ kind: 'create-vault' }),
+      { type: 'UNLOCKED', vaultId: 'v1' },
+      at({ kind: 'create-vault' }),
+    ],
+    [
+      'VAULT_CREATED off create-vault is ignored',
+      at({ kind: 'unlock', vaultId: 'v1' }),
+      { type: 'VAULT_CREATED' },
+      at({ kind: 'unlock', vaultId: 'v1' }),
+    ],
     ['UNLOCKED with nothing to restore', at({ kind: 'unlock', vaultId: null }), { type: 'UNLOCKED', vaultId: 'v1' }, at({ kind: 'projects' })],
     [
       'VAULT_CREATED -> projects, drops returnTo',

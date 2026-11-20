@@ -13,6 +13,9 @@ interface FieldProps extends React.HTMLAttributes<HTMLDivElement> {
   error?: string
   required?: boolean
   optional?: boolean
+  /** Secrio: announce the error (role="alert") — for errors that arrive
+   *  after a wait (a server answer), not for ones shown while typing. */
+  announce?: boolean
 }
 
 const Field = React.forwardRef<HTMLDivElement, FieldProps>(
@@ -24,6 +27,7 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
       error,
       required,
       optional,
+      announce,
       className,
       children,
       ...props
@@ -86,6 +90,7 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
         {hasError && (
           <p
             id={htmlFor ? fieldErrorId(htmlFor) : undefined}
+            role={announce ? "alert" : undefined}
             className="text-xs text-destructive leading-relaxed flex items-center gap-1"
           >
             <svg

@@ -46,6 +46,18 @@ describe('TopBar', () => {
     expect((await m.currentVault()).unlocked).toBe(false)
   })
 
+  test('the "could not lock" alert goes away when the user moves to another screen', async () => {
+    const m = createMockApi()
+    const api: Api = { ...m, lock: () => Promise.reject(new ApiError('internal', 'x')) }
+    const { user } = renderApp(api)
+    await onProjects()
+    await user.click(screen.getByRole('button', { name: 'Lock' }))
+    await screen.findByText("Couldn't lock the vault. Try again.")
+    await user.click(screen.getByRole('button', { name: 'hotenb' }))
+    await screen.findByRole('heading', { level: 1, name: 'hotenb' })
+    expect(screen.queryByText("Couldn't lock the vault. Try again.")).toBeNull()
+  })
+
   test.each<['locked' | 'no_vault']>([['locked'], ['no_vault']])(
     'lock rejecting %s (already locked) behaves like success',
     async (code) => {

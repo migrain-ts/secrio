@@ -37,6 +37,8 @@ describe('Unlock', () => {
     expect(passwordInput()).toHaveFocus()
     expect(passwordInput()).toHaveAttribute('aria-invalid', 'true')
     expect(passwordInput()).toHaveAccessibleDescription('Wrong password')
+    // the answer arrives after a wait: announced, not only described
+    expect(screen.getByRole('alert')).toHaveTextContent('Wrong password')
   })
 
   test('the password is gone from the DOM as soon as it is submitted, and a loading button keeps its label', async () => {
@@ -46,6 +48,8 @@ describe('Unlock', () => {
     await user.keyboard('{Enter}')
     const button = screen.getByRole('button', { name: 'Unlock' })
     expect(button).toBeDisabled()
+    // no way to leave mid-unlock (a late answer would pull the user back)
+    expect(screen.getByRole('button', { name: 'Create a new vault' })).toBeDisabled()
     expect(passwordInput()).toHaveValue('')
     expect(document.body.innerHTML).not.toContain(MOCK_PASSWORD)
     await onProjects()
