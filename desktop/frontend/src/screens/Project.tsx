@@ -399,6 +399,8 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
           open={formOpen}
           onOpenChange={setFormOpen}
           envId={currentEnvId}
+          envName={env?.name ?? ''}
+          existingNames={secrets?.map((s) => s.name) ?? []}
           editing={editing}
           onEnvGone={() => void loadEnvs()}
           onSaved={async (name) => {

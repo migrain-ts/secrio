@@ -279,6 +279,24 @@ describe('Project: create and edit', () => {
     expect(screen.getByLabelText('Value')).toHaveValue('')
   })
 
+  test('create refuses a name already in the env (the screen passes its names)', async () => {
+    const m = await seeded()
+    const spy = vi.spyOn(m, 'saveSecret')
+    const { user } = await openHotenb(m)
+    await user.click(screen.getByRole('button', { name: 'New secret' }))
+    await screen.findByRole('dialog', { name: 'New secret' })
+    await user.type(screen.getByLabelText('Name'), 'SEEDED')
+    await user.tab()
+    expect(screen.getByLabelText('Name')).toHaveAccessibleDescription(
+      'A secret with this name already exists in Development',
+    )
+    await user.type(screen.getByLabelText('Value'), 'other')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveFocus())
+    expect(spy).not.toHaveBeenCalled()
+    expect(await m.revealSecret(DEV, 'SEEDED')).toBe(VALUE)
+  })
+
   test('edit: the current value is loaded masked, the name is fixed, the type change is saved', async () => {
     const m = await seeded()
     const spy = vi.spyOn(m, 'saveSecret')

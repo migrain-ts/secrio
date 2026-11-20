@@ -37,6 +37,10 @@ interface Props {
   envId: string
   /** The secret to edit; null creates a new one. */
   editing: SecretDTO | null
+  /** For the duplicate-name message. */
+  envName: string
+  /** Names the screen has loaded for this env: create refuses them (case-sensitive). */
+  existingNames: readonly string[]
   /** After a successful save, with the saved name. */
   onSaved: (name: string) => void
   /** The environment no longer exists (not_found): the parent refreshes. */
@@ -72,6 +76,8 @@ export function SecretForm({ open, onOpenChange, finalFocus, ...rest }: Props) {
 function Body({
   envId,
   editing,
+  envName,
+  existingNames,
   onSaved,
   onEnvGone,
   busyRef,
@@ -94,6 +100,11 @@ function Body({
   const [loading, setLoading] = useState(editing !== null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [nameErr, setNameErr] = useState<string | null>(null)
+
+  // Create never overwrites: SaveSecret creates OR updates, so an existing
+  // name (exact match, names are case-sensitive) is refused here.
+  const dupError = `A secret with this name already exists in ${envName}`
+  const createNameError = (n: string) => nameError(n) ?? (existingNames.includes(n) ? dupError : null)
   const [valueErr, setValueErr] = useState<string | null>(null)
   const [formErr, setFormErr] = useState<string | null>(null)
 
@@ -123,7 +134,7 @@ function Body({
     e.preventDefault()
     if (busyRef.current || loading || loadFailed) return
     setFormErr(null)
-    const ne = editing ? null : nameError(name)
+    const ne = editing ? null : createNameError(name)
     const ve = valueError(value)
     setNameErr(ne)
     setValueErr(ve)
@@ -132,6 +143,25 @@ function Body({
     busyRef.current = true
     setBusy(true)
     try {
+      if (!editing) {
+        // Re-check against a fresh list: the name may have been created
+        // elsewhere (the CLI) since the screen loaded its list.
+        let fresh: SecretDTO[]
+        try {
+          fresh = await api.listSecrets(envId)
+        } catch (err) {
+          // locked/no_vault: the guarded api already left the screen.
+          if (!(err instanceof ApiError && (err.code === 'locked' || err.code === 'no_vault'))) {
+            setFormErr("Couldn't save the secret. Try again.")
+          }
+          return
+        }
+        if (fresh.some((s) => s.name === name)) {
+          setNameErr(dupError)
+          nameRef.current?.focus()
+          return
+        }
+      }
       await api.saveSecret(envId, name, value, type)
       setValue('')
       busyRef.current = false
@@ -184,7 +214,7 @@ function Body({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => {
-            if (!editing && name !== '') setNameErr(nameError(name))
+            if (!editing && name !== '') setNameErr(createNameError(name))
           }}
           aria-invalid={nameErr ? true : undefined}
           aria-describedby={fieldDescribedBy('secret-name', nameErr ?? undefined)}

@@ -18,6 +18,8 @@ const JWT: SecretDTO = {
   updatedAt: '2026-11-12T16:40:00Z',
 }
 const STRIPE: SecretDTO = { ...JWT, name: 'STRIPE_KEY', type: 'api_key', description: 'Test mode only' }
+/** The names the screen had loaded (a subset of the mock's Development). */
+const LOADED = ['API_KEY', 'JWT_SECRET']
 
 function Harness({ editing, onSaved, onEnvGone }: { editing: SecretDTO | null; onSaved: (n: string) => void; onEnvGone: () => void }) {
   const [open, setOpen] = useState(false)
@@ -31,6 +33,8 @@ function Harness({ editing, onSaved, onEnvGone }: { editing: SecretDTO | null; o
         onOpenChange={setOpen}
         envId={ENV}
         editing={editing}
+        envName="Development"
+        existingNames={LOADED}
         onSaved={onSaved}
         onEnvGone={onEnvGone}
       />
@@ -249,6 +253,83 @@ describe('SecretForm: create', () => {
     const { user } = await setup()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open form' })).toHaveFocus())
+  })
+})
+
+describe('SecretForm: create never overwrites', () => {
+  const DUP = 'A secret with this name already exists in Development'
+
+  test('an existing name is refused on blur and on submit, nothing saved, value kept, name focused', async () => {
+    const m = createMockApi()
+    const spy = vi.spyOn(m, 'saveSecret')
+    const { user, onSaved } = await setup(m)
+    await user.type(nameInput(), 'JWT_SECRET')
+    await user.tab()
+    expect(nameInput()).toHaveAccessibleDescription(DUP)
+    await user.type(valueInput(), 'would-overwrite')
+    await user.click(save())
+    await waitFor(() => expect(nameInput()).toHaveFocus())
+    expect(nameInput()).toHaveAccessibleDescription(DUP)
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true')
+    expect(valueInput()).toHaveValue('would-overwrite')
+    expect(spy).not.toHaveBeenCalled()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(await m.revealSecret(ENV, 'JWT_SECRET')).toBe('fake-jwt-signing-secret-0000')
+  })
+
+  test('a name that differs only by case is another name', async () => {
+    const m = createMockApi()
+    const spy = vi.spyOn(m, 'saveSecret')
+    const { user, onSaved } = await setup(m)
+    await user.type(nameInput(), 'jwt_secret')
+    await user.type(valueInput(), 'v')
+    await user.click(save())
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith('jwt_secret'))
+    expect(spy).toHaveBeenCalledWith(ENV, 'jwt_secret', 'v', 'text')
+  })
+
+  test('a name created elsewhere since the list was loaded is caught at submit', async () => {
+    const m = createMockApi()
+    const spy = vi.spyOn(m, 'saveSecret')
+    const { user, onSaved } = await setup(m)
+    await user.type(nameInput(), 'FROM_CLI')
+    await user.type(valueInput(), 'mine')
+    await m.saveSecret(ENV, 'FROM_CLI', 'theirs', 'text') // e.g. `secrio set` meanwhile
+    spy.mockClear()
+    await user.click(save())
+    await waitFor(() => expect(nameInput()).toHaveAccessibleDescription(DUP))
+    expect(nameInput()).toHaveFocus()
+    expect(valueInput()).toHaveValue('mine')
+    expect(spy).not.toHaveBeenCalled()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(await m.revealSecret(ENV, 'FROM_CLI')).toBe('theirs')
+  })
+
+  test('the fresh list fails: a generic alert and nothing saved', async () => {
+    const m = createMockApi()
+    const saveSecret = vi.spyOn(m, 'saveSecret')
+    const api: Api = { ...m, listSecrets: () => Promise.reject(new ApiError('internal', 'server text')) }
+    const { user, dialog, onSaved } = await setup(api)
+    await user.type(nameInput(), 'NEW_ONE')
+    await user.type(valueInput(), 'v')
+    await user.click(save())
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent("Couldn't save the secret. Try again.")
+    expect(saveSecret).not.toHaveBeenCalled()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(valueInput()).toHaveValue('v')
+    expect(document.body.innerHTML).not.toContain('server text')
+  })
+
+  test('edit keeps updating the same name', async () => {
+    const m = createMockApi()
+    const list = vi.spyOn(m, 'listSecrets')
+    const spy = vi.spyOn(m, 'saveSecret')
+    const { user, onSaved } = await setup(m, JWT)
+    await waitFor(() => expect(valueInput()).toBeEnabled())
+    await user.click(save())
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith('JWT_SECRET'))
+    expect(spy).toHaveBeenCalledWith(ENV, 'JWT_SECRET', 'fake-jwt-signing-secret-0000', 'password')
+    expect(list).not.toHaveBeenCalled()
   })
 })
 
