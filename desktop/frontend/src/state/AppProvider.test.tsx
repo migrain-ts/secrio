@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { API_METHODS, type Api } from '@/api/client'
 import { ApiError } from '@/api/errors'
@@ -8,8 +9,11 @@ import { AppProvider, useApp } from '@/state/AppProvider'
 /** Shows the state as text and exposes the context to the test. */
 let ctx: ReturnType<typeof useApp>
 function Probe() {
-  ctx = useApp()
-  return <output data-testid="screen">{JSON.stringify(ctx.screen)}</output>
+  const v = useApp()
+  useEffect(() => {
+    ctx = v
+  })
+  return <output data-testid="screen">{JSON.stringify(v.screen)}</output>
 }
 const shown = () => JSON.parse(screen.getByTestId('screen').textContent ?? 'null') as unknown
 

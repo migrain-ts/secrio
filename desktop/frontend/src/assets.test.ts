@@ -12,8 +12,14 @@ const enabled = process.env.DIST_CHECK === '1'
 // URL strings allowed in the bundle. None is ever fetched:
 // - XML namespaces used by React DOM for SVG/MathML;
 // - React's minified error text ("visit https://react.dev/errors/N");
-// - Tailwind's license banner comment.
-const ALLOWED = ['http://www.w3.org/', 'https://react.dev/errors/', 'https://tailwindcss.com']
+// - Tailwind's license banner comment;
+// - Base UI's minified error text ("visit https://base-ui.com/production-error?code=N").
+const ALLOWED = [
+  'http://www.w3.org/',
+  'https://react.dev/errors/',
+  'https://tailwindcss.com',
+  'https://base-ui.com/production-error',
+]
 
 describe.runIf(enabled)('dist', () => {
   test('dist exists (run pnpm test:dist)', () => {

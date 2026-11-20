@@ -2,10 +2,13 @@
   "library": "iconoir",
   "prefix": "iconoir",
   "source": "iconify",
-  "installedAt": "2026-11-19T21:56:36.019Z",
+  "installedAt": "2026-11-20T04:06:11.911Z",
   "icons": [
     "check",
+    "info-circle",
+    "lock",
     "nav-arrow-down",
-    "nav-arrow-right"
+    "nav-arrow-right",
+    "warning-circle"
   ]
 }

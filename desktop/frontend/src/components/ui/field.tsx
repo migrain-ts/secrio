@@ -75,13 +75,19 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
         </div>
 
         {description && !hasError && (
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <p
+            id={htmlFor ? fieldDescriptionId(htmlFor) : undefined}
+            className="text-xs text-muted-foreground leading-relaxed"
+          >
             {description}
           </p>
         )}
 
         {hasError && (
-          <p className="text-xs text-destructive leading-relaxed flex items-center gap-1">
+          <p
+            id={htmlFor ? fieldErrorId(htmlFor) : undefined}
+            className="text-xs text-destructive leading-relaxed flex items-center gap-1"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 16 16"
@@ -104,5 +110,16 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
 )
 Field.displayName = "Field"
 
-export { Field }
+// Ids of the description and error lines, so the control can point at them
+// with aria-describedby (Secrio: errors are announced with their field).
+const fieldDescriptionId = (htmlFor: string) => `${htmlFor}-description`
+const fieldErrorId = (htmlFor: string) => `${htmlFor}-error`
+
+/** aria-describedby for the control of a Field: its error, else its description. */
+function fieldDescribedBy(htmlFor: string, error?: string, description?: string): string | undefined {
+  if (error) return fieldErrorId(htmlFor)
+  return description ? fieldDescriptionId(htmlFor) : undefined
+}
+
+export { Field, fieldDescribedBy }
 export type { FieldProps }

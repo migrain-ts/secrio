@@ -6,3 +6,6 @@
 export { NavArrowDownIcon } from "./nav-arrow-down";
 export { NavArrowRightIcon } from "./nav-arrow-right";
 export { CheckIcon } from "./check";
+export { LockIcon } from "./lock";
+export { WarningCircleIcon } from "./warning-circle";
+export { InfoCircleIcon } from "./info-circle";

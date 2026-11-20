@@ -1,7 +1,54 @@
-export default function App() {
+import type { Api } from '@/api/client'
+import type { BackendStatus } from '@/api/select'
+import { TopBar } from '@/components/TopBar'
+import { CreateVault } from '@/screens/CreateVault'
+import { Fatal } from '@/screens/Fatal'
+import { Unlock } from '@/screens/Unlock'
+import { AppProvider, useApp } from '@/state/AppProvider'
+
+/** Props only for tests: production uses the real api and backendStatus. */
+export default function App(props: { api?: Api; backendStatus?: BackendStatus }) {
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-2xl font-semibold tracking-tight">Secrio</h1>
-    </main>
+    <AppProvider {...props}>
+      <Shell />
+    </AppProvider>
+  )
+}
+
+/** Renders the current screen. */
+export function Shell() {
+  const { screen } = useApp()
+  switch (screen.kind) {
+    case 'boot':
+      // Usually one quick call: nothing to show rather than a flashing spinner.
+      return <main aria-busy="true" className="min-h-screen bg-background" />
+    case 'fatal':
+      return <Fatal />
+    case 'unlock':
+      // keyed so a new lock starts a fresh form (no stale error/password)
+      return <Unlock key={`${screen.vaultId}:${screen.notice ?? ''}`} vaultId={screen.vaultId} notice={screen.notice} />
+    case 'create-vault':
+      return <CreateVault />
+    case 'projects':
+    case 'project':
+      return (
+        <div className="flex h-screen flex-col bg-background">
+          <TopBar />
+          <main className="flex-1 overflow-auto">
+            <DataPlaceholder title={screen.kind === 'projects' ? 'Projects' : 'Project'} />
+          </main>
+        </div>
+      )
+  }
+}
+
+// TODO(task-11): replaced by the project picker (Projects) and, in Task 12,
+// the project view. Neutral on purpose: the page title and an empty content
+// area inside the shell, no "coming soon" copy.
+function DataPlaceholder({ title }: { title: string }) {
+  return (
+    <div className="mx-auto w-full max-w-[75rem] px-6 pt-12">
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
+    </div>
   )
 }
