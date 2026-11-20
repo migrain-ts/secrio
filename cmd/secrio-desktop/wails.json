@@ -3,7 +3,7 @@
   "outputfilename": "secrio-desktop",
   "frontend:dir": "../../desktop/frontend",
   "frontend:install": "pnpm install --frozen-lockfile",
-  "frontend:build": "pnpm run build",
+  "frontend:build": "pnpm run build:release",
   "frontend:dev:watcher": "pnpm run dev",
   "frontend:dev:serverUrl": "auto",
   "build:dir": "../../desktop/build",
