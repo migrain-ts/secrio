@@ -176,6 +176,7 @@ describe('structure errors', () => {
     const e = await envId(m, 'hotenb', 'Development')
     expect(await code(m.deleteProject('p-nope'))).toBe('not_found')
     expect(await code(m.deleteEnvironment('e-nope'))).toBe('not_found')
+    expect(await code(m.listEnvironments('p-nope'))).toBe('not_found') // like envDTOs in Go
     expect(await code(m.listSecrets('e-nope'))).toBe('not_found')
     expect(await code(m.deleteSecret(e, 'NOPE'))).toBe('not_found')
     expect(await code(m.revealSecret(e, 'NOPE'))).toBe('not_found')

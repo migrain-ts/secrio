@@ -88,19 +88,33 @@ describe('Unlock', () => {
     expect(app.vault?.name).toBe('work')
   })
 
-  test('a vault was locked elsewhere: notice, then the selection comes back after unlock', async () => {
+  test('locked during an action: the involuntary notice, then the selection comes back after unlock', async () => {
     const m = createMockApi()
     const { user } = renderApp(m)
     await onProjects()
-    act(() => app.dispatch({ type: 'OPEN_PROJECT', projectId: 'p-1', envId: 'e-2' }))
+    act(() => app.dispatch({ type: 'OPEN_PROJECT', projectId: 'p-hotenb', envId: 'e-hotenb-staging' }))
     m.__test.lockedByCli()
     await act(async () => {
       await app.api.listProjects().catch(() => {})
     })
     await onUnlock()
-    expect(screen.getByRole('status')).toHaveTextContent('Your vault was locked.')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Your vault was locked while you were working. Your last change was not saved.',
+    )
     await user.keyboard(`${MOCK_PASSWORD}{Enter}`)
-    await waitFor(() => expect(app.screen).toEqual({ kind: 'project', projectId: 'p-1', envId: 'e-2' }))
+    await waitFor(() =>
+      expect(app.screen).toEqual({ kind: 'project', projectId: 'p-hotenb', envId: 'e-hotenb-staging' }),
+    )
+  })
+
+  test('locked noticed by the focus check: the short notice', async () => {
+    const m = createMockApi()
+    renderApp(m)
+    await onProjects()
+    m.__test.lockedByCli()
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await onUnlock()
+    expect(screen.getByRole('status')).toHaveTextContent(/^Your vault was locked\.$/)
   })
 
   test('"Create a new vault" opens the create form', async () => {

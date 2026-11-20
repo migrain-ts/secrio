@@ -13,8 +13,8 @@ import { useApp } from '@/state/AppProvider'
 import type { Notice } from '@/state/machine'
 
 const NOTICE: Record<Notice, string> = {
+  interrupted: 'Your vault was locked while you were working. Your last change was not saved.',
   locked: 'Your vault was locked.',
-  expired: 'Your session expired.',
 }
 
 export function Unlock({ vaultId, notice }: { vaultId: string | null; notice?: Notice }) {

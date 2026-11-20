@@ -335,8 +335,8 @@ export function createMockApi(opts: MockOptions = {}): MockApi {
 
     listEnvironments: (projectId) =>
       run(() => {
-        const p = open().projects.find((x) => x.id === projectId)
-        return p ? sortedEnvs(p).map(envDTO) : []
+        const p = open().projects.find((x) => x.id === projectId) ?? fail('not_found', 'not found')
+        return sortedEnvs(p).map(envDTO)
       }),
 
     createEnvironment: (projectId, name) =>

@@ -17,7 +17,7 @@ import { api as realApi, API_METHODS, type Api, backendStatus as realStatus } fr
 import { ApiError } from '@/api/errors'
 import type { BackendStatus } from '@/api/select'
 import type { CurrentVault, VaultDTO } from '@/api/types'
-import { type AppEvent, initialState, isDataScreen, reducer, type Screen } from '@/state/machine'
+import { type AppEvent, initialState, isDataScreen, type Notice, reducer, type Screen } from '@/state/machine'
 
 export interface VaultSync {
   current: CurrentVault
@@ -73,14 +73,15 @@ export function AppProvider({ api: raw = realApi, backendStatus = realStatus, ch
     vaultRef.current = vault
   })
 
-  const lockedOut = useCallback(() => {
-    dispatch({ type: 'LOCKED', vaultId: vaultRef.current?.id ?? null, returnTo: screenRef.current, notice: 'locked' })
+  const lockedOut = useCallback((notice: Notice) => {
+    dispatch({ type: 'LOCKED', vaultId: vaultRef.current?.id ?? null, returnTo: screenRef.current, notice })
   }, [])
 
   const api = useMemo<Api>(() => {
     const onError = (e: unknown) => {
       if (!(e instanceof ApiError)) return
-      if (e.code === 'locked') lockedOut()
+      // an action failed: whatever it was doing was not saved
+      if (e.code === 'locked') lockedOut('interrupted')
       else if (e.code === 'no_vault' && isDataScreen(screenRef.current)) {
         raw.listVaults().then(
           (vs) => dispatch(vs.length > 0 ? { type: 'GOTO_UNLOCK', vaultId: null } : { type: 'GOTO_CREATE_VAULT' }),
@@ -148,7 +149,7 @@ function useBoot(backendStatus: BackendStatus, syncVault: () => Promise<VaultSyn
  * deliberately no timer anywhere: currentVault refreshes the session idle
  * timer, so a poll would keep the vault unlocked forever (Api.currentVault).
  */
-function useFocusCheck(screenRef: RefObject<Screen>, api: Api, lockedOut: () => void) {
+function useFocusCheck(screenRef: RefObject<Screen>, api: Api, lockedOut: (notice: Notice) => void) {
   const last = useRef(-Infinity)
   useEffect(() => {
     const onFocus = () => {
@@ -158,7 +159,7 @@ function useFocusCheck(screenRef: RefObject<Screen>, api: Api, lockedOut: () => 
       last.current = now
       api.currentVault().then(
         (cv) => {
-          if (!cv.unlocked) lockedOut()
+          if (!cv.unlocked) lockedOut('locked')
         },
         () => {}, // the guarded api already reacted to locked/no_vault
       )

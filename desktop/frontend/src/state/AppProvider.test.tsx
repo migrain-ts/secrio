@@ -85,7 +85,7 @@ describe('guarded api', () => {
     })
     expect(caught).toBeInstanceOf(ApiError)
     expect((caught as ApiError).code).toBe('locked')
-    expect(shown()).toEqual({ kind: 'unlock', vaultId: 'v-work', notice: 'locked' })
+    expect(shown()).toEqual({ kind: 'unlock', vaultId: 'v-work', notice: 'interrupted' })
     // unlocking again restores the project
     await act(async () => {
       await ctx.api.unlock('v-work', MOCK_PASSWORD)
