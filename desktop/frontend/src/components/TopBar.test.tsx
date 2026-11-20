@@ -1,5 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
+import type { Api } from '@/api/client'
+import { ApiError } from '@/api/errors'
 import { createMockApi } from '@/api/mock'
 import { app, renderApp } from '@/test/app'
 
@@ -20,6 +22,42 @@ describe('TopBar', () => {
     expect(screen.queryByRole('banner')).toBeNull()
     expect(screen.queryByRole('status')).toBeNull() // the user locked it: no notice
   })
+
+  test('a failed lock stays on the data screen, says so, and a retry works', async () => {
+    const m = createMockApi()
+    let broken = true
+    const api: Api = {
+      ...m,
+      lock: () => (broken ? Promise.reject(new ApiError('internal', 'disk error')) : m.lock()),
+    }
+    const { user } = renderApp(api)
+    await onProjects()
+    const lockButton = screen.getByRole('button', { name: 'Lock' })
+    await user.click(lockButton)
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't lock the vault. Try again.")
+    expect(screen.queryByText(/disk error/)).toBeNull()
+    expect(app.screen).toEqual({ kind: 'projects' })
+    expect(screen.getByRole('banner')).toHaveTextContent('work')
+    expect(lockButton).toBeEnabled()
+    expect((await m.currentVault()).unlocked).toBe(true)
+    broken = false
+    await user.click(lockButton)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Unlock your vault' })).toBeInTheDocument()
+    expect((await m.currentVault()).unlocked).toBe(false)
+  })
+
+  test.each<['locked' | 'no_vault']>([['locked'], ['no_vault']])(
+    'lock rejecting %s (already locked) behaves like success',
+    async (code) => {
+      const m = createMockApi()
+      const api: Api = { ...m, lock: () => Promise.reject(new ApiError(code, 'x')) }
+      const { user } = renderApp(api)
+      await onProjects()
+      await user.click(screen.getByRole('button', { name: 'Lock' }))
+      expect(await screen.findByRole('heading', { level: 1, name: 'Unlock your vault' })).toBeInTheDocument()
+      expect(screen.queryByText("Couldn't lock the vault. Try again.")).toBeNull()
+    },
+  )
 
   test('the switcher appears with several vaults; a locked vault lands on unlock', async () => {
     const m = createMockApi()
