@@ -28,8 +28,8 @@ const Empty = React.forwardRef<HTMLDivElement, EmptyProps>(
           <div
             className={cn(
               "flex h-14 w-14 items-center justify-center",
+              // Secrio: no drop shadow (review gate: shadows only for overlays)
               "rounded-[0.75rem] border border-border bg-background",
-              "shadow-[0_0.0625rem_0.125rem_0_rgb(0_0_0/0.04)]",
               "text-muted-foreground"
             )}
           >

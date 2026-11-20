@@ -83,7 +83,7 @@ export function Projects() {
   )
 
   return (
-    <div className="mx-auto w-full max-w-[75rem] px-6 py-8">
+    <div className="mx-auto w-full max-w-[75rem] px-4 py-8">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto text-xl font-semibold tracking-tight text-foreground">Projects</h1>
         {projects !== null && !empty && (
@@ -99,7 +99,7 @@ export function Projects() {
               placeholder="Search projects"
               autoComplete="off"
               spellCheck={false}
-              className="pl-8"
+              className="px-8"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -134,7 +134,7 @@ export function Projects() {
             <p role="status" className="sr-only">
               Loading projects
             </p>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3">
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} className="h-[4.5rem] rounded-lg" />
               ))}
@@ -169,7 +169,7 @@ export function Projects() {
 
         {shown.length > 0 && (
           // role="list": list-style:none drops the implicit role in WebKit
-          <ul role="list" aria-label="Projects" className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+          <ul role="list" aria-label="Projects" className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3">
             {shown.map((p) => (
               <ProjectCard
                 key={p.id}
@@ -241,9 +241,9 @@ function ProjectCard({
           onClick={onOpen}
           aria-label={p.name}
           aria-describedby={countsId}
-          className="h-full w-full flex-col items-start justify-start gap-1 rounded-lg px-4 py-3.5 pr-12 text-left whitespace-normal text-foreground hover:bg-accent hover:text-foreground active:scale-100"
+          className="h-full w-full flex-col items-start justify-start gap-1 rounded-lg p-4 text-left whitespace-normal text-foreground hover:bg-accent hover:text-foreground active:scale-100"
         >
-          <span data-project-name title={p.name} className="w-full truncate text-sm font-medium">
+          <span data-project-name title={p.name} className="w-[calc(100%-2rem)] truncate text-sm font-medium">
             {p.name}
           </span>
           <span id={countsId} className="flex gap-3 text-xs text-muted-foreground tabular-nums">

@@ -302,7 +302,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-6">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
         <nav aria-label="Breadcrumb">
           <ol className="flex items-center gap-2 text-sm">
             <li>
@@ -339,13 +339,13 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
 
         <section aria-labelledby={env ? 'env-title' : undefined} className="flex min-w-0 flex-1 flex-col">
           {envsFailed && (
-            <div className="p-6">
+            <div className="p-4">
               <ErrorAlert text="Couldn't load this project." onRetry={() => void loadEnvs(true)} />
             </div>
           )}
 
           {envs !== null && envs.length === 0 && (
-            <div className="p-6">
+            <div className="p-4">
               <Empty
                 icon={<FolderIcon aria-hidden />}
                 title="No environments yet"
@@ -362,7 +362,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
 
           {env && (
             <>
-              <div className="flex shrink-0 flex-wrap items-center gap-3 px-6 pb-3 pt-5">
+              <div className="flex shrink-0 flex-wrap items-center gap-3 px-4 pb-3 pt-4">
                 <h2 id="env-title" className="text-base font-semibold text-foreground">
                   {env.name}
                 </h2>
@@ -383,7 +383,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
                         placeholder="Search secrets"
                         autoComplete="off"
                         spellCheck={false}
-                        className="pl-8"
+                        className="px-8"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => {
@@ -397,7 +397,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
                 )}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-auto px-6 pb-6">
+              <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
                 {secretsFailed && (
                   <ErrorAlert text="Couldn't load secrets." onRetry={() => currentEnvId && void loadSecrets(currentEnvId)} />
                 )}
@@ -446,7 +446,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
           )}
 
           {envs === null && !envsFailed && (
-            <div className="px-6 pt-5">
+            <div className="px-4 pt-4">
               <TableSkeleton />
             </div>
           )}
