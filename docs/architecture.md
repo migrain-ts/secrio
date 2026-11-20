@@ -338,6 +338,8 @@ Local patches to the generated kit (a kit regeneration would revert them; reappl
 - The master password and every typed value pass through JS memory (and a Go string) and cannot be zeroed; so does a revealed value.
 - Reveal window: 10 s on screen. Copy window: 30 s on the clipboard (see Clipboard for what is not covered).
 - The hidden value field is a textarea masked with `-webkit-text-security`: its text can still be selected and copied, and screen readers read it.
+- The edit dialog (`dialogs/SecretForm.tsx`) loads the current value with `revealSecret` into that masked textarea and keeps it as long as the dialog is open: it is not dropped on blur or after 10 s like `useReveal`; it goes when the dialog closes or the screen unmounts (lock).
+- Secret names and import-preview names are metadata: they appear in the DOM and in `title` attributes (truncated cells) by design.
 - No history, compare, settings, export or rename in the UI (the Core has history, compare and export).
 - A secret created (e.g. by the CLI) between the UI's fresh name check and `saveSecret` is overwritten; follow-up: a create-only flag in the facade/Core `SetSecret`.
 - Core zeroing debt: `GetSecret` / `SetSecret` decrypt every secret of the environment and do not clear the ones not returned; import plans keep value copies the facade cannot clear.
