@@ -13,18 +13,22 @@ import (
 
 // fakeClip is a settable clipboard that logs its calls.
 type fakeClip struct {
-	mu     sync.Mutex
-	text   string
-	getErr error
-	setErr error
-	gets   int
-	sets   []string // every SetText argument, in order
+	mu       sync.Mutex
+	text     string
+	getErr   error
+	setErr   error
+	panicGet bool // GetText panics (a crashing adapter)
+	gets     int
+	sets     []string // every SetText argument, in order
 }
 
 func (c *fakeClip) GetText() (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.gets++
+	if c.panicGet {
+		panic("injected")
+	}
 	if c.getErr != nil {
 		return "", c.getErr
 	}
@@ -330,6 +334,27 @@ func TestGetErrorAtFire(t *testing.T) {
 	if c.clip.clears() != 0 || c.clip.current() != secretA {
 		t.Fatal("must never blind-clear, and state is reset after fire")
 	}
+}
+
+// The timer runs on its own goroutine, where a panic would kill the app.
+func TestFirePanicIsContained(t *testing.T) {
+	c := newClipEnv(t)
+	c.copy(t, "A", 30)
+	c.clip.mu.Lock()
+	c.clip.panicGet = true
+	c.clip.mu.Unlock()
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("timer panic escaped: %v", r)
+			}
+		}()
+		c.timers.fire(0)
+	}()
+	c.clip.mu.Lock()
+	c.clip.panicGet = false
+	c.clip.mu.Unlock()
+	c.copy(t, "B", 30) // clip.mu was released
 }
 
 func TestCopyUnknownSecret(t *testing.T) {

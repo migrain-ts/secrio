@@ -53,8 +53,10 @@ func (a *App) clearOurClipboard() {
 	a.clearIfOursLocked()
 }
 
-// fireClear is the timer callback for the copy armed as gen.
+// fireClear is the timer callback for the copy armed as gen. It runs on the
+// timer's goroutine, so a panic (a crashing clipboard adapter) is contained.
 func (a *App) fireClear(gen uint64) {
+	defer func() { _ = recover() }()
 	a.clip.mu.Lock()
 	defer a.clip.mu.Unlock()
 	if a.clip.gen != gen {
