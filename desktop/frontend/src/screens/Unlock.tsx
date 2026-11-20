@@ -118,7 +118,7 @@ export function Unlock({ vaultId, notice }: { vaultId: string | null; notice?: N
               </SelectContent>
             </Select>
             {vaultError && (
-              <p id="unlock-vault-error" className="text-xs text-destructive">
+              <p id="unlock-vault-error" className="text-xs text-destructive-text">
                 {vaultError}
               </p>
             )}

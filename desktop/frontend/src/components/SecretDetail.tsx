@@ -69,7 +69,7 @@ export function SecretDetail({ secret: s, reveal, onCopy, onEdit, onDelete }: Pr
               <p className="text-xs text-muted-foreground">Hidden again after {REVEAL_MS / 1000} s.</p>
             )}
             {reveal.failed && (
-              <p role="alert" className="text-xs text-destructive">
+              <p role="alert" className="text-xs text-destructive-text">
                 Couldn't show the value.
               </p>
             )}
@@ -99,7 +99,7 @@ export function SecretDetail({ secret: s, reveal, onCopy, onEdit, onDelete }: Pr
               <EditPencilIcon aria-hidden className="size-4" />
               Edit
             </Button>
-            <Button variant="ghost" size="sm" className="hover:text-destructive" onClick={(e) => onDelete(s, e.currentTarget)}>
+            <Button variant="ghost" size="sm" className="hover:text-destructive-text" onClick={(e) => onDelete(s, e.currentTarget)}>
               <TrashIcon aria-hidden className="size-4" />
               Delete
             </Button>

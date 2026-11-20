@@ -260,7 +260,7 @@ function ProjectCard({
             <MoreHorizIcon aria-hidden className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onDelete(triggerRef.current)} className="gap-2 text-destructive">
+            <DropdownMenuItem onClick={() => onDelete(triggerRef.current)} className="gap-2 text-destructive-text">
               <TrashIcon aria-hidden className="size-4" />
               Delete project
             </DropdownMenuItem>

@@ -48,13 +48,13 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
               htmlFor={htmlFor}
               className={cn(
                 "text-sm font-medium leading-none text-foreground",
-                hasError && "text-destructive"
+                hasError && "text-destructive-text"
               )}
             >
               {label}
             </Label>
             {required && (
-              <span className="text-destructive text-sm leading-none" aria-hidden="true">
+              <span className="text-destructive-text text-sm leading-none" aria-hidden="true">
                 *
               </span>
             )}
@@ -67,11 +67,11 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
         <div
           className={cn(
             hasError && [
-              "[&_input]:border-destructive",
-              "[&_input]:focus-visible:border-destructive",
-              "[&_input]:focus-visible:shadow-[0_0_0_0.1875rem_hsl(var(--destructive)/0.12)]",
-              "[&_textarea]:border-destructive",
-              "[&_select]:border-destructive",
+              "[&_input]:border-destructive-text",
+              "[&_input]:focus-visible:border-destructive-text",
+              "[&_input]:focus-visible:shadow-[0_0_0_0.1875rem_color-mix(in_oklch,var(--destructive-text)_25%,transparent)]",
+              "[&_textarea]:border-destructive-text",
+              "[&_select]:border-destructive-text",
             ]
           )}
         >
@@ -91,7 +91,7 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
           <p
             id={htmlFor ? fieldErrorId(htmlFor) : undefined}
             role={announce ? "alert" : undefined}
-            className="text-xs text-destructive leading-relaxed flex items-center gap-1"
+            className="text-xs text-destructive-text leading-relaxed flex items-center gap-1"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

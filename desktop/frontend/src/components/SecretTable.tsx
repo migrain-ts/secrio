@@ -147,7 +147,7 @@ const SecretRow = memo(
                 aria-label={`${action === 'reveal' && revealed ? 'Hide' : label} ${s.name}`}
                 tabIndex={tabbable ? 0 : -1}
                 onClick={(e) => onAction(action, s, e.currentTarget)}
-                className={action === 'delete' ? 'hover:text-destructive' : undefined}
+                className={action === 'delete' ? 'hover:text-destructive-text' : undefined}
               >
                 {action === 'reveal' && revealed ? (
                   <EyeClosedIcon aria-hidden className="size-4" />
