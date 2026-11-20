@@ -85,6 +85,8 @@ export function NewProject({ open, onOpenChange, onCreated, finalFocus }: Props)
         else if (!busyRef.current) close()
       }}
     >
+      {/* initialFocus, not autoFocus: autoFocus would focus before Base UI
+          records the trigger, and focus would not return to it on close. */}
       <DialogContent initialFocus={inputRef} finalFocus={finalFocus} className="max-w-[27.5rem]">
         <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate aria-busy={busy}>
           <DialogHeader>

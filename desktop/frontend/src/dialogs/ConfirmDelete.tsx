@@ -27,8 +27,9 @@ interface Props {
   requireText?: string
   /** Rejecting keeps the dialog open with an error; resolving closes it. */
   onConfirm: () => Promise<void>
-  /** Where focus goes on close (default: the element focused before opening). */
-  finalFocus?: RefObject<HTMLElement | null>
+  /** Where focus goes on close (default: the element focused before opening).
+   *  A function is read when focus is restored, after the closing render. */
+  finalFocus?: RefObject<HTMLElement | null> | (() => HTMLElement | null)
 }
 
 /** Confirmation for an irreversible delete (projects, envs, secrets). */

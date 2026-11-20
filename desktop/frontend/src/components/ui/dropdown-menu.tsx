@@ -22,12 +22,16 @@ const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup
  * Base UI popups expose open state as the presence of `data-open` (there is
  * no `data-state` attribute), so the shared `useDataState` helper from
  * `@/lib/motion` cannot be reused here.
+ *
+ * Secrio: takes the element itself (held in state by a callback ref), not a
+ * ref object. The portal mounts the popup a render after the content, so a
+ * mount-time effect saw `ref.current === null`, never observed it, and the
+ * menu opened empty.
  */
-function useDataOpen(ref: React.RefObject<HTMLElement | null>): boolean {
+function useDataOpen(el: HTMLElement | null): boolean {
   const [open, setOpen] = React.useState(false)
 
   React.useEffect(() => {
-    const el = ref.current
     if (!el) return
 
     setOpen(el.hasAttribute("data-open"))
@@ -39,7 +43,7 @@ function useDataOpen(ref: React.RefObject<HTMLElement | null>): boolean {
     observer.observe(el, { attributes: true, attributeFilter: ["data-open"] })
 
     return () => observer.disconnect()
-  }, [ref])
+  }, [el])
 
   return open
 }
@@ -115,8 +119,8 @@ function DropdownMenuContent({
     MenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const isOpen = useDataOpen(ref)
+  const [popup, setPopup] = React.useState<HTMLDivElement | null>(null)
+  const isOpen = useDataOpen(popup)
 
   return (
     <MenuPrimitive.Portal keepMounted>
@@ -128,7 +132,7 @@ function DropdownMenuContent({
         sideOffset={sideOffset}
       >
         <MenuPrimitive.Popup
-          ref={ref}
+          ref={setPopup}
           className={cn(
             "z-50 min-w-[8rem] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground",
             "shadow-[0_0.25rem_0.375rem_-0.0625rem_rgba(0,0,0,0.4),0_0.5rem_1.5rem_-0.25rem_rgba(0,0,0,0.5),0_0_0_0.0625rem_rgba(255,255,255,0.04)]",
