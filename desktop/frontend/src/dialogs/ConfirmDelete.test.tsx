@@ -56,7 +56,7 @@ describe('ConfirmDelete', () => {
 
   test('with requireText the input has focus and confirm waits for the exact text', async () => {
     const { user, onConfirm, confirm } = await setup({ requireText: 'hotenb' })
-    const input = screen.getByLabelText('Type hotenb to confirm')
+    const input = screen.getByLabelText('Type “hotenb” to confirm')
     await waitFor(() => expect(input).toHaveFocus())
     expect(input).toHaveAttribute('autocomplete', 'off')
     expect(confirm()).toBeDisabled()
@@ -106,15 +106,39 @@ describe('ConfirmDelete', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
   })
 
+  test('the name to type is quoted and keeps its leading/trailing spaces visible', async () => {
+    await setup({ requireText: ' app ' })
+    const input = screen.getByLabelText('Type “ app ” to confirm')
+    const quoted = input.closest('div')?.querySelector('label span')
+    expect(quoted).toHaveTextContent('“ app ”', { normalizeWhitespace: false })
+    expect(quoted).toHaveClass('whitespace-pre-wrap')
+  })
+
+  test('after a rejected delete, focus returns to the input (type-to-confirm)', async () => {
+    const { user } = await setup({ requireText: 'hotenb', onConfirm: () => Promise.reject(new Error('x')) })
+    const input = screen.getByLabelText('Type “hotenb” to confirm')
+    await user.type(input, 'hotenb')
+    await user.click(screen.getByRole('button', { name: 'Delete project' }))
+    await screen.findByRole('alert')
+    await waitFor(() => expect(input).toHaveFocus())
+  })
+
+  test('after a rejected delete, focus returns to the confirm button', async () => {
+    const { user, confirm } = await setup({ onConfirm: () => Promise.reject(new Error('x')) })
+    await user.click(confirm())
+    await screen.findByRole('alert')
+    await waitFor(() => expect(confirm()).toHaveFocus())
+  })
+
   test('reopening starts fresh: no typed text, no old error', async () => {
     const { user } = await setup({ requireText: 'hotenb', onConfirm: () => Promise.reject(new Error('x')) })
-    await user.type(screen.getByLabelText('Type hotenb to confirm'), 'hotenb{Enter}')
+    await user.type(screen.getByLabelText('Type “hotenb” to confirm'), 'hotenb{Enter}')
     await screen.findByRole('alert')
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Open' }))
     await screen.findByRole('alertdialog')
-    expect(screen.getByLabelText('Type hotenb to confirm')).toHaveValue('')
+    expect(screen.getByLabelText('Type “hotenb” to confirm')).toHaveValue('')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

@@ -50,6 +50,7 @@ export function ConfirmDelete({
   const busyRef = useRef(false)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const confirmRef = useRef<HTMLButtonElement>(null)
   const ready = requireText === undefined || typed === requireText
 
   function close() {
@@ -69,6 +70,8 @@ export function ConfirmDelete({
       close()
     } catch {
       setFailed(true) // fixed copy: never the raw error
+      // the disabled button dropped focus: back to where the user acts
+      setTimeout(() => (requireText === undefined ? confirmRef : inputRef).current?.focus())
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -99,7 +102,8 @@ export function ConfirmDelete({
           {requireText !== undefined && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="confirm-delete-text" className="text-sm text-muted-foreground">
-                Type <span className="font-medium text-foreground">{requireText}</span> to confirm
+                {/* quoted, spaces kept: a name may start or end with a space */}
+                Type <span className="font-medium whitespace-pre-wrap text-foreground">“{requireText}”</span> to confirm
               </Label>
               <Input
                 ref={inputRef}
@@ -117,7 +121,7 @@ export function ConfirmDelete({
             <AlertDialogCancel ref={cancelRef} type="button">
               Cancel
             </AlertDialogCancel>
-            <Button type="submit" variant="destructive" disabled={!ready || busy}>
+            <Button ref={confirmRef} type="submit" variant="destructive" disabled={!ready || busy}>
               {busy && <Spinner label={null} className="size-4" />}
               {confirmLabel}
             </Button>

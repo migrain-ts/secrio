@@ -378,7 +378,7 @@ describe('Project: delete', () => {
     expect(dialog).toHaveTextContent("Deletes Development and its 8 secrets. This can't be undone.")
     const confirm = within(dialog).getByRole('button', { name: 'Delete environment' })
     expect(confirm).toBeDisabled()
-    await user.type(within(dialog).getByLabelText('Type Development to confirm'), 'Development')
+    await user.type(within(dialog).getByLabelText('Type “Development” to confirm'), 'Development')
     await user.click(confirm)
     await table('Production')
     expect(within(nav()).queryByRole('button', { name: /^Development/ })).toBeNull()

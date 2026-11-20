@@ -230,7 +230,7 @@ describe('Projects: create', () => {
     await user.click(screen.getByRole('button', { name: 'Project actions for cdn' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Delete project' }))
     await screen.findByRole('alertdialog', { name: 'Delete this project?' })
-    await user.type(screen.getByLabelText('Type cdn to confirm'), 'cdn{Enter}')
+    await user.type(screen.getByLabelText('Type “cdn” to confirm'), 'cdn{Enter}')
     await waitFor(() => expect(pending).toHaveLength(3))
     pending[2]([...FIXTURE.slice(0, 2), zeta]) // the newest answer first
     await waitFor(() => expect(cardNames()).toEqual(['billing', 'Api-Gateway', 'zeta']))
@@ -268,7 +268,7 @@ describe('Projects: delete', () => {
     expect(dialog).toHaveTextContent("Deletes portfolio, its 2 environments and 5 secrets. This can't be undone.")
     const confirm = within(dialog).getByRole('button', { name: 'Delete project' })
     expect(confirm).toBeDisabled()
-    await user.type(within(dialog).getByLabelText('Type portfolio to confirm'), 'portfolio')
+    await user.type(within(dialog).getByLabelText('Type “portfolio” to confirm'), 'portfolio')
     await user.click(confirm)
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(del).toHaveBeenCalledWith('p-portfolio')
@@ -292,7 +292,7 @@ describe('Projects: delete', () => {
     // the others go away behind the screen's back (e.g. the CLI): infra is the last one
     for (const p of await m.listProjects()) if (p.name !== 'infra') await m.deleteProject(p.id)
     await openDelete(user, 'infra')
-    await user.type(screen.getByLabelText('Type infra to confirm'), 'infra{Enter}')
+    await user.type(screen.getByLabelText('Type “infra” to confirm'), 'infra{Enter}')
     expect(await screen.findByText('No projects yet')).toBeInTheDocument()
     await waitFor(() => expect(newButton()).toHaveFocus())
   })
