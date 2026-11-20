@@ -54,7 +54,19 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
   const bodyRef = useRef<HTMLTableSectionElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null) // what opened the current delete dialog
   const importTriggerRef = useRef<HTMLElement | null>(null) // toolbar or empty-state "Import .env"
+  const formTriggerRef = useRef<HTMLElement | null>(null) // what opened the secret form
+  const newEnvTriggerRef = useRef<HTMLElement | null>(null) // what opened New environment
   const deletedRef = useRef(false)
+
+  /** Focus target on close, read lazily: the trigger if it is still on
+   *  screen, else the fallback (an empty-state button vanishes on create). */
+  const backTo = (trigger: { current: HTMLElement | null }, fallback: { current: HTMLElement | null }) => () =>
+    trigger.current?.isConnected ? trigger.current : fallback.current
+
+  function openNewEnv() {
+    newEnvTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setNewEnvOpen(true)
+  }
 
   // Sequence guards: only the latest request of each list may land.
   const envReq = useRef(0)
@@ -173,6 +185,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
 
   function openEdit(s: SecretDTO | null) {
     reveal.hide()
+    formTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setEditing(s)
     setFormOpen(true)
   }
@@ -194,7 +207,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
     const h = handlers.current
     setSelected(s.name)
     if (action === 'reveal') {
-      if (h.selName === s.name) void h.reveal.reveal()
+      if (h.selName === s.name) void (h.reveal.value !== null ? h.reveal.hide() : h.reveal.reveal())
       else pendingReveal.current = s.name
     } else if (action === 'copy') void h.copy(s)
     else if (action === 'edit') h.openEdit(s)
@@ -212,10 +225,14 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
     setSelected(null)
     reveal.hide()
     await refresh()
-    let text = `Imported ${r.imported} new`
-    if (r.replaced > 0) text += `, replaced ${r.replaced}`
-    if (r.skipped > 0) text += `, skipped ${r.skipped}`
-    toast({ title: text })
+    // Only what happened: "Imported 2 new, skipped 1", or "Replaced 2".
+    const parts = [
+      r.imported > 0 ? `imported ${r.imported} new` : '',
+      r.replaced > 0 ? `replaced ${r.replaced}` : '',
+      r.skipped > 0 ? `skipped ${r.skipped}` : '',
+    ].filter(Boolean)
+    const text = parts.join(', ')
+    toast({ title: text.charAt(0).toUpperCase() + text.slice(1) })
     rescueFocus()
   }
 
@@ -230,6 +247,29 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
     setSelected(null)
     await refresh()
     toast({ title: 'Secret deleted' })
+  }
+
+  /** Opens the env delete with a fresh secret count: secrets added elsewhere
+   *  since the list loaded must still require typing the name. */
+  async function openEnvDelete(e: EnvDTO, trigger: HTMLElement | null) {
+    triggerRef.current = trigger
+    deletedRef.current = false
+    let target = e
+    const id = ++envReq.current
+    try {
+      const es = await api.listEnvironments(projectId)
+      if (id !== envReq.current) return
+      setEnvs(es)
+      const fresh = es.find((x) => x.id === e.id)
+      if (!fresh) return // gone already: the fresh list no longer shows it
+      target = fresh
+    } catch (err) {
+      if (leftScreen(err)) return
+      if (isNotFound(err)) return dispatch({ type: 'OPEN_PROJECTS' })
+      // otherwise confirm with the count we have
+    }
+    setDelEnv(target)
+    setDelEnvOpen(true)
   }
 
   async function deleteEnv(e: EnvDTO) {
@@ -292,13 +332,8 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
           onSelect={(id) => {
             if (id !== currentEnvId) dispatch({ type: 'SELECT_ENV', envId: id })
           }}
-          onNew={() => setNewEnvOpen(true)}
-          onDelete={(e, trigger) => {
-            triggerRef.current = trigger
-            deletedRef.current = false
-            setDelEnv(e)
-            setDelEnvOpen(true)
-          }}
+          onNew={openNewEnv}
+          onDelete={(e, trigger) => void openEnvDelete(e, trigger)}
           newRef={newEnvRef}
         />
 
@@ -316,7 +351,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
                 title="No environments yet"
                 description="Add an environment, like Development or Production, to keep its secrets."
                 action={
-                  <Button ref={newEnvRef} onClick={() => setNewEnvOpen(true)}>
+                  <Button ref={newEnvRef} onClick={openNewEnv}>
                     <PlusIcon aria-hidden className="size-4" />
                     New environment
                   </Button>
@@ -403,6 +438,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
                     onSelect={onSelect}
                     onAction={onAction}
                     bodyRef={bodyRef}
+                    revealedName={reveal.value !== null ? selName : null}
                   />
                 )}
               </div>
@@ -435,6 +471,7 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
           envName={env?.name ?? ''}
           existingNames={secrets?.map((s) => s.name) ?? []}
           editing={editing}
+          finalFocus={backTo(formTriggerRef, newRef)}
           onEnvGone={() => void loadEnvs()}
           onSaved={async (name) => {
             setSelected(name)
@@ -452,13 +489,14 @@ export function Project({ projectId, envId }: { projectId: string; envId: string
           envName={env?.name ?? ''}
           onImported={(r) => void onImported(r)}
           // the empty-state trigger is gone after a first import
-          finalFocus={() => (importTriggerRef.current?.isConnected ? importTriggerRef.current : newRef.current)}
+          finalFocus={backTo(importTriggerRef, newRef)}
         />
       )}
       <NewEnv
         open={newEnvOpen}
         onOpenChange={setNewEnvOpen}
         projectId={projectId}
+        finalFocus={backTo(newEnvTriggerRef, newEnvRef)}
         onCreated={async (e) => {
           await loadEnvs()
           dispatch({ type: 'SELECT_ENV', envId: e.id })

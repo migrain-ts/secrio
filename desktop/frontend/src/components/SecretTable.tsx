@@ -2,7 +2,7 @@
 // run of dots, never derived from (or holding) a real value.
 import { type KeyboardEvent, memo, type RefObject, useCallback, useEffect, useRef } from 'react'
 import type { SecretDTO } from '@/api/types'
-import { CopyIcon, EditPencilIcon, EyeIcon, TrashIcon } from '@/components/icons'
+import { CopyIcon, EditPencilIcon, EyeClosedIcon, EyeIcon, TrashIcon } from '@/components/icons'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -19,9 +19,11 @@ interface Props {
   onAction: (action: RowAction, secret: SecretDTO, trigger: HTMLElement) => void
   /** The tbody (the parent focuses a row after a delete). */
   bodyRef: RefObject<HTMLTableSectionElement | null>
+  /** The secret whose value is revealed (its Reveal button reads "Hide"). */
+  revealedName: string | null
 }
 
-export function SecretTable({ envName, secrets, selected, onSelect, onAction, bodyRef }: Props) {
+export function SecretTable({ envName, secrets, selected, onSelect, onAction, bodyRef, revealedName }: Props) {
   // Roving tab stop: the selected row, else the first.
   const tabbable = secrets.some((s) => s.name === selected) ? selected : (secrets[0]?.name ?? null)
 
@@ -75,6 +77,7 @@ export function SecretTable({ envName, secrets, selected, onSelect, onAction, bo
             index={i}
             selected={s.name === selected}
             tabbable={s.name === tabbable}
+            revealed={s.name === revealedName}
             onSelect={onSelect}
             onAction={onAction}
             onKeyDown={onKeyDown}
@@ -90,6 +93,7 @@ interface RowProps {
   index: number
   selected: boolean
   tabbable: boolean
+  revealed: boolean
   onSelect: Props['onSelect']
   onAction: Props['onAction']
   onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>, index: number) => void
@@ -104,7 +108,7 @@ const ACTIONS: [RowAction, string, typeof EyeIcon][] = [
 
 // Memoised: a 500-row env re-renders only the rows whose props change.
 const SecretRow = memo(
-  function SecretRow({ secret: s, index, selected, tabbable, onSelect, onAction, onKeyDown }: RowProps) {
+  function SecretRow({ secret: s, index, selected, tabbable, revealed, onSelect, onAction, onKeyDown }: RowProps) {
     return (
       <TableRow
         tabIndex={tabbable ? 0 : -1}
@@ -140,13 +144,16 @@ const SecretRow = memo(
               <IconButton
                 key={action}
                 size="xs"
-                aria-label={`${label} ${s.name}`}
-                title={label}
+                aria-label={`${action === 'reveal' && revealed ? 'Hide' : label} ${s.name}`}
                 tabIndex={tabbable ? 0 : -1}
                 onClick={(e) => onAction(action, s, e.currentTarget)}
                 className={action === 'delete' ? 'hover:text-destructive' : undefined}
               >
-                <Icon aria-hidden className="size-4" />
+                {action === 'reveal' && revealed ? (
+                  <EyeClosedIcon aria-hidden className="size-4" />
+                ) : (
+                  <Icon aria-hidden className="size-4" />
+                )}
               </IconButton>
             ))}
           </div>

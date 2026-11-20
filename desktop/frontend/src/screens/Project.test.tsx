@@ -164,6 +164,22 @@ describe('Project: reveal', () => {
     expect(row('SEEDED')).toHaveAttribute('aria-current', 'true')
   })
 
+  test('the row Reveal button toggles: Hide NAME while revealed', async () => {
+    const { user } = await openHotenb(await seeded())
+    await user.click(within(row('SEEDED')).getByRole('button', { name: 'Reveal SEEDED' }))
+    await waitFor(() => expect(revealed()).toHaveTextContent(VALUE))
+    const hide = within(row('SEEDED')).getByRole('button', { name: 'Hide SEEDED' })
+    expect(within(row('API_KEY')).getByRole('button', { name: 'Reveal API_KEY' })).toBeInTheDocument()
+    await user.click(hide)
+    expect(revealed()).toBeNull()
+    expect(within(row('SEEDED')).getByRole('button', { name: 'Reveal SEEDED' })).toBeInTheDocument()
+  })
+
+  test('row action buttons carry no native title tooltip', async () => {
+    await openHotenb(await seeded())
+    for (const b of within(row('SEEDED')).getAllByRole('button')) expect(b).not.toHaveAttribute('title')
+  })
+
   test('Hide hides', async () => {
     const { user } = await revealSeeded()
     await user.click(within(detail()).getByRole('button', { name: 'Hide' }))
@@ -297,6 +313,21 @@ describe('Project: create and edit', () => {
     expect(await m.revealSecret(DEV, 'SEEDED')).toBe(VALUE)
   })
 
+  test('create from the empty state: focus lands on the toolbar New secret', async () => {
+    const m = createMockApi()
+    await m.createEnvironment('p-hotenb', 'QA')
+    const { user } = await openHotenb(m)
+    await user.click(envButton('QA'))
+    await screen.findByText('No secrets in QA yet')
+    await user.click(screen.getByRole('button', { name: 'New secret' }))
+    await screen.findByRole('dialog', { name: 'New secret' })
+    await user.type(screen.getByLabelText('Name'), 'FIRST')
+    await user.type(screen.getByLabelText('Value'), 'v')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await table('QA')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New secret' })).toHaveFocus())
+  })
+
   test('edit: the current value is loaded masked, the name is fixed, the type change is saved', async () => {
     const m = await seeded()
     const spy = vi.spyOn(m, 'saveSecret')
@@ -384,6 +415,19 @@ describe('Project: delete', () => {
     expect(within(nav()).queryByRole('button', { name: /^Development/ })).toBeNull()
   })
 
+  test('env delete reads a fresh secret count (secrets added elsewhere require typing the name)', async () => {
+    const m = createMockApi()
+    const qa = await m.createEnvironment('p-hotenb', 'QA')
+    const { user } = await openHotenb(m)
+    await m.saveSecret(qa.id, 'ADDED_BY_CLI', 'x', 'text') // behind the screen's back
+    await user.click(within(nav()).getByRole('button', { name: 'Environment actions for QA' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete environment' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Delete this environment?' })
+    expect(dialog).toHaveTextContent("Deletes QA and its 1 secret. This can't be undone.")
+    expect(within(dialog).getByLabelText('Type “QA” to confirm')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Delete environment' })).toBeDisabled()
+  })
+
   test('empty env: a plain confirm with Cancel focused', async () => {
     const m = createMockApi()
     await m.createEnvironment('p-hotenb', 'QA')
@@ -411,6 +455,8 @@ describe('Project: delete', () => {
     await user.keyboard('Development{Enter}')
     expect(await screen.findByText('No secrets in Development yet')).toBeInTheDocument()
     expect(app.screen).toMatchObject({ kind: 'project', projectId: p.id })
+    // the empty-state trigger is gone: focus lands on the sidebar's New environment
+    await waitFor(() => expect(within(nav()).getByRole('button', { name: 'New environment' })).toHaveFocus())
   })
 })
 
@@ -611,6 +657,19 @@ describe('Project: import .env', () => {
     expect(await screen.findByText('Imported 2 new, replaced 1')).toBeInTheDocument()
     expect(await m.revealSecret(DEV, 'JWT_SECRET')).toBe(VALUE)
     noValueInPage()
+  })
+
+  test('replace with nothing new: the toast says only what changed', async () => {
+    const m = await seeded()
+    m.__test.setFileContent(MOCK_IMPORT_PATH, { JWT_SECRET: VALUE })
+    const { user } = await openHotenb(m)
+    await user.click(screen.getByRole('button', { name: 'Import .env' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Import .env file' })
+    await user.click(within(dialog).getByRole('button', { name: 'Choose file' }))
+    await within(dialog).findByText('No new names, 1 already exists')
+    await user.click(within(dialog).getByRole('radio', { name: 'Replace existing' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Import 1 secret' }))
+    expect(await screen.findByText('Replaced 1')).toBeInTheDocument()
   })
 
   test('from an empty env: the empty state offers Import .env, then the table replaces it', async () => {

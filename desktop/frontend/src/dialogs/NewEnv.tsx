@@ -21,8 +21,9 @@ interface Props {
   onOpenChange: (open: boolean) => void
   projectId: string
   onCreated: (env: EnvDTO) => void
-  /** Where focus goes on close (default: the element focused before opening). */
-  finalFocus?: RefObject<HTMLElement | null>
+  /** Where focus goes on close (default: the element focused before opening).
+   *  A function is read when focus is restored, after the closing render. */
+  finalFocus?: RefObject<HTMLElement | null> | (() => HTMLElement | null)
 }
 
 /** Same shape as NewProject: one name field, sent exactly as typed. */
