@@ -14,3 +14,8 @@ export { FolderIcon } from "./folder";
 export { SearchIcon } from "./search";
 export { PlusIcon } from "./plus";
 export { TrashIcon } from "./trash";
+export { EyeIcon } from "./eye";
+export { EyeClosedIcon } from "./eye-closed";
+export { CopyIcon } from "./copy";
+export { EditPencilIcon } from "./edit-pencil";
+export { KeyIcon } from "./key";
