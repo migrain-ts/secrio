@@ -12,9 +12,10 @@ const FIXTURE: ProjectDTO[] = [
   { id: 'p-c', name: 'cdn', envCount: 0, secretCount: 0 },
 ]
 
-/** The mock with a fixed project list (order as given, like the api). */
+/** The mock with a fixed project list (order as given, like the api). Opening one
+ *  shows it with no environments (the project screen checks it exists). */
 function withProjects(projects: ProjectDTO[], m: MockApi = createMockApi()): Api {
-  return { ...m, listProjects: vi.fn(async () => projects) }
+  return { ...m, listProjects: vi.fn(async () => projects), listEnvironments: vi.fn(async () => []) }
 }
 
 const list = () => screen.findByRole('list', { name: 'Projects' })

@@ -4,6 +4,7 @@ import { TopBar } from '@/components/TopBar'
 import { Toaster } from '@/components/ui/toaster'
 import { CreateVault } from '@/screens/CreateVault'
 import { Fatal } from '@/screens/Fatal'
+import { Project } from '@/screens/Project'
 import { Projects } from '@/screens/Projects'
 import { Unlock } from '@/screens/Unlock'
 import { AppProvider, useApp } from '@/state/AppProvider'
@@ -37,21 +38,15 @@ export function Shell() {
         <div className="flex h-screen flex-col bg-background">
           <TopBar />
           <main className="flex-1 overflow-auto">
-            {screen.kind === 'projects' ? <Projects /> : <DataPlaceholder title="Project" />}
+            {screen.kind === 'projects' ? (
+              <Projects />
+            ) : (
+              <Project key={screen.projectId} projectId={screen.projectId} envId={screen.envId} />
+            )}
           </main>
           {/* transient confirmations ("Project created"), polite live region */}
           <Toaster />
         </div>
       )
   }
-}
-
-// TODO(task-12): replaced by the project view. Neutral on purpose: the page
-// title and an empty content area inside the shell, no "coming soon" copy.
-function DataPlaceholder({ title }: { title: string }) {
-  return (
-    <div className="mx-auto w-full max-w-[75rem] px-6 pt-12">
-      <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
-    </div>
-  )
 }
