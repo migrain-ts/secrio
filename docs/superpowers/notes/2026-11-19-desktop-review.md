@@ -22,15 +22,15 @@ all fixes). Data comes from the mock seed, so every name and value is fake.
 |---|---|---|---|
 | Unlock (default and wrong password) | pass | 0 / 0 (1440, 960) | done |
 | Create vault | pass | 0 / 0 (1440, 960) | done |
-| Projects, populated | pass | 0 / **1** at 1440 (`composition/lone-component`), 0 / 0 at 960 | **not done**, see below |
+| Projects, populated | pass | 0 / 0 at 1440 (after the single-column list, final round) and 960 | done |
 | Projects, search no match | pass | 0 / 0 | done |
 | Projects, empty vault | pass | 0 / 0 (transient toast left out of the snapshot) | done |
 | New project dialog | pass | 0 / 0 | done |
 | New environment dialog | pass | 0 / 0 | done |
-| Project view: env sidebar, table, detail with a selected and revealed secret | pass (workspace) | 0 / 0 at 1440 | done at 1440; 960 measured before the last two fixes only (screenshot checked) |
-| Project view: nothing selected | pass | measured before the final fixes only | **unverified** (same layout as the revealed state minus the detail card) |
-| Empty environment | pass | not measured | **unverified** (screenshot only) |
-| Project with no environments | pass | not measured | **unverified** (screenshot only) |
+| Project view: env sidebar, table, detail with a selected and revealed secret | pass (workspace) | 0 / 0 at 1440 (full page); 0 / 0 at 960 (scoped: table section + detail panel) | done |
+| Project view: nothing selected | pass | 0 / 0 at 1440 (scoped: detail panel, the only region that differs) | done |
+| Empty environment | pass | 0 / 0 at 1440 (scoped: content section) | done |
+| Project with no environments | pass | 0 / 0 at 1440 (scoped: content section) | done |
 | New / Edit secret dialog (with errors) | pass | 0 / 0 | done |
 | Delete confirmations (secret, env type-to-confirm, project) | pass | 0 / 0 | done |
 | Import: idle | pass | 0 / 0 | done |
@@ -74,7 +74,8 @@ Dialogs were measured at 1440 only: they are fixed-width and centred, so the
    tall, named by its text.
 6. **`spacing/asymmetric-horizontal-inset` (serious)**: search fields (32/12
    because of the leading icon) are now 32/32; project cards (16/48 to leave
-   room for the actions button) are 16/16 with the name width-limited; env
+   room for the actions button) are 16/16 with the name width-limited (and,
+   final round, listed one per row); env
    sidebar items (10/64) are 12/12 with the name width-limited.
 7. **`spacing/density-role` (serious)**: page inset 24 → 16 px (compact
    density) on Projects and the project view; env sidebar width 224 → 184 px
@@ -87,19 +88,24 @@ Dialogs were measured at 1440 only: they are fixed-width and centred, so the
    `--destructive` (about 2:1 on the background). Filled destructive buttons
    keep the dark red with white text.
 
-## Remaining (not done)
+## Final round
 
 - **Projects, populated, 1440: `composition/lone-component` (serious)**,
-  "content covers 22% of the screen and has nothing around it". It does not
-  fire at 960 nor on the no-match/empty states; it depends on the seed (3
-  projects on a large window). The grid now uses `auto-fit` so the cards fill
-  the row, but clearing the rule would need extra content or navigation on
-  the picker (a redesign, out of this task's scope). Decision for the
-  controller/user.
-- **Not re-measured after the final fixes**: project view at 960, project view
-  with nothing selected, empty environment, project with no environments
-  (screenshots reviewed; `inspect-spacing` not run on the final DOM because of
-  the review session's context budget). Treat them as unverified.
+  "content covers 22% of the screen and has nothing around it" (3 cards in a
+  4-column grid on a large window). Minimal fix, attempt 1 of 2: the projects
+  are a single-column list of full-width rows (`grid-cols-1`, same card
+  component). Re-measured at 1440: 0 critical / 0 serious. No second attempt
+  needed.
+- **Re-measured after the final fixes** (real rendered DOM, `newScreen: true`):
+  project view at 960, nothing selected, empty environment, no environments:
+  0 critical / 0 serious. These runs used the capture script's `scope` (the
+  region that differs from the already-measured full page: table section,
+  detail panel, content section); the top bar and sidebar were measured on
+  the full project view at 1440.
+
+## Remaining (not done)
+
+None at critical/serious level. Moderates below are accepted.
 
 ## Accepted moderates (not fixed)
 
