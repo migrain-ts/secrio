@@ -3,7 +3,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 // Linear Card — dark developer tool
-// Real treatment: dark bg, 1px border, subtle depth shadow with slight edge glow
+// Dark bg, 1px border, slight edge glow (Secrio: no drop shadow, review gate)
 
 const Card = React.forwardRef<
   HTMLDivElement,
@@ -13,7 +13,7 @@ const Card = React.forwardRef<
     ref={ref}
     className={cn(
       "rounded-lg border border-border bg-card text-card-foreground",
-      "shadow-[0_0.0625rem_0.1875rem_rgba(0,0,0,0.3),0_0_0_0.0625rem_rgba(255,255,255,0.03),inset_0_0.0625rem_0_rgba(255,255,255,0.04)]",
+      "shadow-[0_0_0_0.0625rem_rgba(255,255,255,0.03),inset_0_0.0625rem_0_rgba(255,255,255,0.04)]",
       className
     )}
     {...props}

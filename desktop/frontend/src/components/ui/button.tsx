@@ -5,7 +5,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 // Linear Button: dark developer tool, purple (#5e6ad2) primary
-// Real linear.app treatment: gradient fill, 1px border ring, subtle drop shadow
+// Linear treatment: fill + 1px border ring. Secrio: no drop shadows on
+// buttons (review gate surface/drop-shadow: shadows only for overlays)
 // Secondary: dark panel with border, ghost understated
 
 const buttonVariants = cva(
@@ -20,19 +21,18 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // Primary: gradient fill + border ring + drop shadow.
+        // Primary: fill + border ring (no drop shadow).
         // Ring color is derived from --primary via color-mix so theme overrides
         // (orange, green, etc.) automatically retint the ring.
         default:
           "bg-primary text-primary-foreground " +
-          "shadow-[0_0_0_0.0625rem_color-mix(in_oklch,var(--primary)_55%,transparent),0_0.0625rem_0.1875rem_rgba(0,0,0,0.4),inset_0_0.0625rem_0_rgba(255,255,255,0.1)] " +
-          "hover:bg-primary/90 hover:shadow-[0_0_0_0.0625rem_color-mix(in_oklch,var(--primary)_70%,transparent),0_0.125rem_0.375rem_rgba(0,0,0,0.4),inset_0_0.0625rem_0_rgba(255,255,255,0.12)]",
-        // Secondary: dark panel, border, subtle shadow
+          "shadow-[0_0_0_0.0625rem_color-mix(in_oklch,var(--primary)_55%,transparent),inset_0_0.0625rem_0_rgba(255,255,255,0.1)] " +
+          "hover:bg-primary/90 hover:shadow-[0_0_0_0.0625rem_color-mix(in_oklch,var(--primary)_70%,transparent),inset_0_0.0625rem_0_rgba(255,255,255,0.12)]",
+        // Secondary: dark panel, border
         secondary:
           "bg-secondary text-secondary-foreground " +
           "border border-border " +
-          "shadow-[0_0.0625rem_0.125rem_rgba(0,0,0,0.2)] " +
-          "hover:bg-accent hover:border-border/60 hover:shadow-[0_0.0625rem_0.25rem_rgba(0,0,0,0.3)]",
+          "hover:bg-accent hover:border-border/60",
         // Outline: transparent with full border
         outline:
           "border border-border bg-transparent text-foreground " +
@@ -44,7 +44,7 @@ const buttonVariants = cva(
         // Destructive
         destructive:
           "bg-destructive text-destructive-foreground " +
-          "shadow-[0_0_0_0.0625rem_rgba(239,68,68,0.4),0_0.0625rem_0.1875rem_rgba(0,0,0,0.3)] " +
+          "shadow-[0_0_0_0.0625rem_rgba(239,68,68,0.4)] " +
           "hover:bg-destructive/90",
         // Link
         link: "text-primary underline-offset-4 hover:underline",
