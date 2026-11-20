@@ -375,6 +375,18 @@ describe('import', () => {
     const m = createMockApi({ pickResult: '' })
     expect(await m.pickEnvFile()).toBe('')
   })
+
+  test('setPickResult: the next picks return another path, which becomes allowed', async () => {
+    const m = createMockApi()
+    const e = await envId(m, 'hotenb', 'Staging')
+    m.__test.setFileContent('/other/.env', { OTHER_NAME: 'x' })
+    expect(await code(m.previewImport(e, '/other/.env'))).toBe('invalid_value') // not picked yet
+    m.__test.setPickResult('/other/.env')
+    expect(await m.pickEnvFile()).toBe('/other/.env')
+    expect(await m.previewImport(e, '/other/.env')).toEqual({ new: ['OTHER_NAME'], duplicate: [] })
+    m.__test.setPickResult('')
+    expect(await m.pickEnvFile()).toBe('')
+  })
 })
 
 describe('bundle marker', () => {

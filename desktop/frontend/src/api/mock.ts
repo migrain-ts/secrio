@@ -39,6 +39,8 @@ export interface MockTestHooks {
   lockedByCli(): void
   /** Replaces the fake file at path (null: the file cannot be read). */
   setFileContent(path: string, entries: Record<string, string> | null): void
+  /** What the next pickEnvFile calls return ("" = the user cancels). */
+  setPickResult(path: string): void
   /** What the mock clipboard holds ("" when empty). */
   clipboardText(): string
 }
@@ -191,7 +193,7 @@ function seedProjects(): Project[] {
 export function createMockApi(opts: MockOptions = {}): MockApi {
   const latency = opts.latencyMs ?? 0
   const clipboardReadable = opts.clipboardReadable ?? true
-  const pickResult = opts.pickResult ?? MOCK_IMPORT_PATH
+  let pickResult = opts.pickResult ?? MOCK_IMPORT_PATH
 
   const vaults: Vault[] = opts.noVault
     ? []
@@ -475,6 +477,9 @@ export function createMockApi(opts: MockOptions = {}): MockApi {
     },
     setFileContent: (path, entries) => {
       files.set(path, entries === null ? null : { ...entries })
+    },
+    setPickResult: (path) => {
+      pickResult = path
     },
     clipboardText: () => clipboard,
   }
